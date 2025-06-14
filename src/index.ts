@@ -15,6 +15,8 @@ import {
   Widget
 } from '@lumino/widgets';
 
+import { INotebookTracker } from '@jupyterlab/notebook';
+
 /** SVG string for the ReproLab icon */
 const REPROLAB_ICON_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="16" viewBox="0 0 24 24">
@@ -48,8 +50,10 @@ function getXsrfToken(): string | null {
 class ReprolabSidebarWidget extends Widget {
   checklist: string[];
   checked: Record<string, boolean>;
+  notebooks: INotebookTracker | undefined;
+  app: JupyterFrontEnd;
 
-  constructor() {
+  constructor(app: JupyterFrontEnd, notebooks?: INotebookTracker) {
     super();
     this.id = 'reprolab-sidebar';
     this.addClass('jp-SideBar');
@@ -60,6 +64,8 @@ class ReprolabSidebarWidget extends Widget {
     this.checklist = DEFAULT_CHECKLIST;
     this.checked = {};
     this.checklist.forEach(item => { this.checked[item] = false; });
+    this.notebooks = notebooks;
+    this.app = app;
     this.render();
     this.loadChecklistState();
   }
@@ -69,6 +75,11 @@ class ReprolabSidebarWidget extends Widget {
       <div class="reprolab-header">
         <h1>ReproLab</h1>
         <h3>One step closer to accessible reproducible research</h3>
+      </div>
+      <div class="reprolab-demo">
+        <h2>Demo</h2>
+        <p>Press the button below to add a demo cell to the top of the active notebook. The cell will explain how to use the ReproLab extension.</p>
+        <button id="reprolab-demo-btn" style="padding: 8px; font-size: 1em; margin-bottom: 12px;">Add Demo Cell</button>
       </div>
       <div class="reprolab-checklist">
         <h2>Reproducibility Checklist</h2>
@@ -94,6 +105,44 @@ class ReprolabSidebarWidget extends Widget {
         </div>
       </div>
     `;
+
+    // Demo button handler
+    const demoBtn = this.node.querySelector('#reprolab-demo-btn');
+    if (demoBtn) {
+      demoBtn.setAttribute('style', (demoBtn.getAttribute('style') || '') + 'cursor:pointer;');
+      demoBtn.addEventListener('click', () => {
+        console.log('[ReproLab] Demo button clicked');
+        if (this.notebooks && this.notebooks.currentWidget) {
+          const notebookPanel = this.notebooks.currentWidget;
+          notebookPanel.context.ready.then(() => {
+            const notebook = notebookPanel.content;
+            const model = notebook.model;
+            if (model) {
+              const demoText = `# Welcome to ReproLab!\n\nThis cell was added by the ReproLab extension.\n\n- Use the checklist in the sidebar to track reproducibility steps.\n- Use the Archiving section to configure S3/Minio.\n- Import Python helpers: \`from reprolab.utils import hello\``;
+              const firstCell = model.cells.get(0);
+              const firstCellText = firstCell ? firstCell.toJSON().source : '';
+              if (model.cells.length === 0 || firstCellText !== demoText) {
+                if (this.notebooks && this.notebooks.currentWidget) {
+                  // Insert a new cell at the top
+                  this.app.commands.execute('notebook:insert-cell-above').then(() => {
+                    // Change it to markdown
+                    this.app.commands.execute('notebook:change-cell-to-markdown').then(() => {
+                      // Get the new cell and set its content
+                      const newCell = model.cells.get(0);
+                      if (newCell) {
+                        newCell.toJSON().source = demoText;
+                      }
+                    });
+                  });
+                }
+              }
+            }
+          });
+        } else {
+          alert('No active notebook found. Please open a notebook.');
+        }
+      });
+    }
 
     // Save button handler
     const saveBtn = this.node.querySelector('#reprolab-archive-save');
@@ -175,7 +224,8 @@ class ReprolabSidebarWidget extends Widget {
 /** Activate the extension */
 function activateReprolab(
   app: JupyterFrontEnd,
-  palette: ICommandPalette
+  palette: ICommandPalette,
+  notebooks: INotebookTracker
 ): void {
   console.log('JupyterLab extension reprolab is activated!');
 
@@ -192,7 +242,7 @@ function activateReprolab(
   palette.addItem({ command: 'reprolab:open', category: 'ReproLab' });
 
   // Add the sidebar widget (only once)
-  const sidebarWidget = new ReprolabSidebarWidget();
+  const sidebarWidget = new ReprolabSidebarWidget(app, notebooks);
   app.shell.add(sidebarWidget, 'left', { rank: 100 });
 }
 
@@ -203,7 +253,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
   id: 'reprolab:plugin',
   description: 'One step closer reproducible research',
   autoStart: true,
-  requires: [ICommandPalette],
+  requires: [ICommandPalette, INotebookTracker],
   activate: activateReprolab
 };
 
