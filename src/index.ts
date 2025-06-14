@@ -104,14 +104,6 @@ class ReprolabSidebarWidget extends Widget {
           <button id="reprolab-archive-save" style="padding: 8px; font-size: 1em; margin-top: 8px;">Save</button>
         </div>
       </div>
-      <div class="reprolab-section">
-        <h3>Run Metrics</h3>
-        <button id="reprolab-add-metrics" class="reprolab-button">Add Run Metrics</button>
-      </div>
-      <div class="reprolab-section">
-        <h3>Gather and pin dependencies</h3>
-        <button id="reprolab-gather-deps" class="reprolab-button">Do it</button>
-      </div>
     `;
 
     // Demo button handler
