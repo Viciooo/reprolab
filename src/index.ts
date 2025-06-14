@@ -104,6 +104,10 @@ class ReprolabSidebarWidget extends Widget {
           <button id="reprolab-archive-save" style="padding: 8px; font-size: 1em; margin-top: 8px;">Save</button>
         </div>
       </div>
+      <div class="reprolab-section">
+        <h3>Run Metrics</h3>
+        <button id="reprolab-add-metrics" class="reprolab-button">Add Run Metrics</button>
+      </div>
     `;
 
     // Demo button handler
@@ -161,6 +165,41 @@ class ReprolabSidebarWidget extends Widget {
         this.checked[item] = target.checked;
         this.saveChecklistState();
       });
+    });
+
+    // Add Run Metrics section
+    const runMetricsSection = document.createElement('div');
+    runMetricsSection.className = 'reprolab-section';
+    runMetricsSection.innerHTML = `
+      <h3>Run Metrics</h3>
+      <button id="reprolab-add-metrics" class="reprolab-button">Add Run Metrics</button>
+    `;
+    this.node.appendChild(runMetricsSection);
+
+    // Add event listener for the metrics button
+    const metricsBtn = this.node.querySelector('#reprolab-add-metrics') as HTMLButtonElement;
+    metricsBtn.setAttribute('style', (metricsBtn.getAttribute('style') || '') + 'cursor:pointer;');
+    metricsBtn.addEventListener('click', () => {
+      if (this.notebooks && this.notebooks.currentWidget) {
+        const notebook = this.notebooks.currentWidget.content;
+        if (notebook.model && notebook.model.cells.length > 0) {
+          // Process each cell
+          for (let i = 0; i < notebook.model.cells.length; i++) {
+            const cell = notebook.model.cells.get(i);
+            if (cell) {
+              // Get current content
+              const currentContent = cell.sharedModel.source;
+              // Add markers
+              cell.sharedModel.setSource(`#start\n${currentContent}\n#end`);
+            }
+          }
+          console.log('[ReproLab] Added run metrics to all cells');
+        } else {
+          console.error('[ReproLab] No cells available in notebook');
+        }
+      } else {
+        console.error('[ReproLab] No active notebook found');
+      }
     });
   }
 
