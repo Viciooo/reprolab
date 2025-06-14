@@ -111,35 +111,31 @@ class ReprolabSidebarWidget extends Widget {
     if (demoBtn) {
       demoBtn.setAttribute('style', (demoBtn.getAttribute('style') || '') + 'cursor:pointer;');
       demoBtn.addEventListener('click', () => {
-        console.log('[ReproLab] Demo button clicked');
         if (this.notebooks && this.notebooks.currentWidget) {
-          const notebookPanel = this.notebooks.currentWidget;
-          notebookPanel.context.ready.then(() => {
-            const notebook = notebookPanel.content;
-            const model = notebook.model;
-            if (model) {
-              const demoText = `# Welcome to ReproLab!\n\nThis cell was added by the ReproLab extension.\n\n- Use the checklist in the sidebar to track reproducibility steps.\n- Use the Archiving section to configure S3/Minio.\n- Import Python helpers: \`from reprolab.utils import hello\``;
-              const firstCell = model.cells.get(0);
-              const firstCellText = firstCell ? firstCell.toJSON().source : '';
-              if (model.cells.length === 0 || firstCellText !== demoText) {
-                if (this.notebooks && this.notebooks.currentWidget) {
-                  // Insert a new cell at the top
-                  this.app.commands.execute('notebook:insert-cell-above').then(() => {
-                    // Change it to markdown
-                    this.app.commands.execute('notebook:change-cell-to-markdown').then(() => {
-                      // Get the new cell and set its content
-                      const newCell = model.cells.get(0);
-                      if (newCell) {
-                        newCell.toJSON().source = demoText;
-                      }
-                    });
-                  });
-                }
-              }
+          const notebook = this.notebooks.currentWidget.content;
+          // Select the first cell (if any exist) or ensure a cell exists
+          if (notebook.model && notebook.model.cells.length > 0) {
+            notebook.activeCellIndex = 0;
+          } else {
+            // If no cells exist, insert one to start with
+            this.app.commands.execute('notebook:insert-cell-below');
+            notebook.activeCellIndex = 0;
+          }
+          // Insert a new cell above the first cell (becomes the new top cell)
+          this.app.commands.execute('notebook:insert-cell-above');
+          // Directly set the content of the new cell (now at index 0)
+          if (notebook.model && notebook.model.cells.length > 0) {
+            const cell = notebook.model.cells.get(0);
+            if (cell) {
+              cell.sharedModel.setSource('# test');
+            } else {
+              console.error('[ReproLab] Failed to access the new cell');
             }
-          });
+          } else {
+            console.error('[ReproLab] No cells available after insertion');
+          }
         } else {
-          alert('No active notebook found. Please open a notebook.');
+          console.error('[ReproLab] No active notebook found');
         }
       });
     }
