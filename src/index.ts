@@ -108,6 +108,10 @@ class ReprolabSidebarWidget extends Widget {
         <h3>Run Metrics</h3>
         <button id="reprolab-add-metrics" class="reprolab-button">Add Run Metrics</button>
       </div>
+      <div class="reprolab-section">
+        <h3>Gather and pin dependencies</h3>
+        <button id="reprolab-gather-deps" class="reprolab-button">Do it</button>
+      </div>
     `;
 
     // Demo button handler
@@ -194,6 +198,112 @@ class ReprolabSidebarWidget extends Widget {
             }
           }
           console.log('[ReproLab] Added run metrics to all cells');
+        } else {
+          console.error('[ReproLab] No cells available in notebook');
+        }
+      } else {
+        console.error('[ReproLab] No active notebook found');
+      }
+    });
+
+    // Add Dependencies section
+    const depsSection = document.createElement('div');
+    depsSection.className = 'reprolab-section';
+    depsSection.innerHTML = `
+      <h3>Gather and pin dependencies</h3>
+      <button id="reprolab-gather-deps" class="reprolab-button">Do it</button>
+    `;
+    this.node.appendChild(depsSection);
+
+    // Add event listener for the dependencies button
+    const depsBtn = this.node.querySelector('#reprolab-gather-deps') as HTMLButtonElement;
+    depsBtn.setAttribute('style', (depsBtn.getAttribute('style') || '') + 'cursor:pointer;');
+    depsBtn.addEventListener('click', () => {
+      if (this.notebooks && this.notebooks.currentWidget) {
+        const notebook = this.notebooks.currentWidget.content;
+        if (notebook.model && notebook.model.cells.length > 0) {
+          console.log('[ReproLab] Gathering dependencies...');
+          
+          // Extract pip commands from cells
+          const pipCommands = new Set<string>();
+          for (let i = 0; i < notebook.model.cells.length; i++) {
+            const cell = notebook.model.cells.get(i);
+            if (cell.type === 'code') {
+              const source = cell.sharedModel.getSource();
+              const matches = source.match(/!pip install ([^\n]+)/g);
+              if (matches) {
+                matches.forEach((match: string) => {
+                  const packages = match.replace('!pip install', '').trim().split(/\s+/);
+                  packages.forEach((pkg: string) => pipCommands.add(pkg.trim()));
+                });
+                // Remove the pip install commands from the cell
+                const cleanedSource = source.replace(/!pip install [^\n]+\n?/g, '').trim();
+                cell.sharedModel.setSource(cleanedSource);
+              }
+            }
+          }
+
+          const packages = Array.from(pipCommands).sort();
+          console.log('[ReproLab] Found packages:', packages);
+
+          if (packages.length > 0) {
+            // Create environment.yaml content
+            const envYaml = `name: reprolab-env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip:
+${packages.map(pkg => `    - ${pkg}`).join('\n')}`;
+
+            // Save environment.yaml using content API
+            const xsrfToken = getXsrfToken();
+            fetch('/api/contents/environment.yaml', {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(xsrfToken ? { 'X-XSRFToken': xsrfToken } : {})
+              },
+              body: JSON.stringify({
+                type: 'file',
+                format: 'text',
+                content: envYaml
+              })
+            }).then(response => {
+              if (response.ok) {
+                console.log('[ReproLab] Created environment.yaml');
+                
+                // Select the first cell (if any exist) or ensure a cell exists
+                if (notebook.model && notebook.model.cells.length > 0) {
+                  notebook.activeCellIndex = 0;
+                } else {
+                  // If no cells exist, insert one to start with
+                  this.app.commands.execute('notebook:insert-cell-below');
+                  notebook.activeCellIndex = 0;
+                }
+
+                // Insert a new cell above the first cell (becomes the new top cell)
+                this.app.commands.execute('notebook:insert-cell-above');
+                // Directly set the content of the new cell (now at index 0)
+                if (notebook.model && notebook.model.cells.length > 0) {
+                  const cell = notebook.model.cells.get(0);
+                  if (cell) {
+                    cell.sharedModel.setSource(`# Install dependencies from environment.yaml
+!conda env update -f environment.yaml --prune`);
+                  } else {
+                    console.error('[ReproLab] Failed to access the new cell');
+                  }
+                }
+              } else {
+                console.error('[ReproLab] Failed to create environment.yaml');
+              }
+            }).catch(error => {
+              console.error('[ReproLab] Error creating environment.yaml:', error);
+            });
+          } else {
+            console.log('[ReproLab] No pip install commands found in notebook');
+          }
         } else {
           console.error('[ReproLab] No cells available in notebook');
         }
