@@ -27,14 +27,21 @@ export function createButton(id: string, text: string): HTMLButtonElement {
 }
 
 /**
- * Creates an input element with the specified ID, type, and placeholder
+ * Creates an input element with the specified ID, type, placeholder, default value, and placeholder text
  */
-export function createInput(id: string, type: string, placeholder: string): HTMLInputElement {
+export function createInput(
+  id: string,
+  type: string,
+  placeholder: string,
+  defaultValue: string = '',
+  placeholderText: string = ''
+): HTMLInputElement {
   const input = document.createElement('input');
   input.id = id;
   input.type = type;
   input.className = 'reprolab-input';
-  input.placeholder = placeholder;
+  input.placeholder = placeholderText || placeholder;
+  input.value = defaultValue;
   return input;
 }
 

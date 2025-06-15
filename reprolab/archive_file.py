@@ -10,6 +10,7 @@ import boto3
 from botocore.exceptions import ClientError
 from typing import Union, Type, Dict, Callable, Any, Optional
 from functools import wraps
+from pathlib import Path
 
 # Define supported data types for type hints
 SupportedDataTypes = Union[
@@ -23,7 +24,7 @@ SupportedDataTypes = Union[
 ]
 
 # Ensure .reprolab_data directory exists
-REPROLAB_DATA_DIR = '.reprolab_data'
+REPROLAB_DATA_DIR = 'reprolab_data'
 os.makedirs(REPROLAB_DATA_DIR, exist_ok=True)
 
 # Mapping from type names to actual types and vice versa
@@ -257,34 +258,55 @@ def read_compact(name_hash: str) -> SupportedDataTypes:
     except Exception as e:
         raise Exception(f"Error reading data: {str(e)}")
 
-def upload_to_cloud(file_name: str) -> None:
+def get_aws_env() -> dict:
     """
-    Upload a file from .reprolab_data to S3.
+    Read AWS credentials from aws_env.json file in the reprolab_data directory.
     
-    Args:
-        file_name: Name of the file to upload (must exist in .reprolab_data)
+    Returns:
+        dict: Dictionary containing AWS credentials (AWS_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
     
     Raises:
-        ValueError: If required environment variables are not set
+        ValueError: If required credentials are missing
+    """
+    try:
+        aws_env_path = Path(REPROLAB_DATA_DIR) / 'aws_env.json'
+        if not aws_env_path.exists():
+            raise ValueError("AWS credentials file not found")
+            
+        with open(aws_env_path) as f:
+            env_vars = json.load(f)
+            
+        # Check for required credentials
+        required_vars = ['AWS_BUCKET', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
+        missing_vars = [var for var in required_vars if var not in env_vars or not env_vars[var]]
+        
+        if missing_vars:
+            raise ValueError(f"Missing required AWS credentials: {', '.join(missing_vars)}")
+            
+        return env_vars
+    except Exception as e:
+        raise ValueError(f"Could not read AWS credentials: {str(e)}")
+
+def upload_to_cloud(file_name: str) -> None:
+    """
+    Upload a file from reprolab_data to S3.
+    
+    Args:
+        file_name: Name of the file to upload (must exist in reprolab_data)
+    
+    Raises:
+        ValueError: If required credentials are not set
         Exception: If upload fails
     """
-    # Check required environment variables
-    required_vars = {
-        'AWS_BUCKET': os.getenv('AWS_BUCKET'),
-        'AWS_ACCESS_KEY_ID': os.getenv('AWS_ACCESS_KEY_ID'),
-        'AWS_SECRET_ACCESS_KEY': os.getenv('AWS_SECRET_ACCESS_KEY')
-    }
-    
-    missing_vars = [var for var, value in required_vars.items() if not value]
-    if missing_vars:
-        raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
-    
     try:
+        # Get AWS credentials
+        aws_env = get_aws_env()
+        
         # Initialize S3 client
         s3_client = boto3.client(
             's3',
-            aws_access_key_id=required_vars['AWS_ACCESS_KEY_ID'],
-            aws_secret_access_key=required_vars['AWS_SECRET_ACCESS_KEY']
+            aws_access_key_id=aws_env['AWS_ACCESS_KEY_ID'],
+            aws_secret_access_key=aws_env['AWS_SECRET_ACCESS_KEY']
         )
         
         # Create full local path
@@ -292,9 +314,9 @@ def upload_to_cloud(file_name: str) -> None:
         if not os.path.exists(local_path):
             raise ValueError(f"File not found: {local_path}")
         
-        print(f"[upload_to_cloud] Uploading {local_path} to s3://{required_vars['AWS_BUCKET']}/{file_name}")
-        s3_client.upload_file(local_path, required_vars['AWS_BUCKET'], file_name)
-        print(f"[upload_to_cloud] Successfully uploaded to s3://{required_vars['AWS_BUCKET']}/{file_name}")
+        print(f"[upload_to_cloud] Uploading {local_path} to s3://{aws_env['AWS_BUCKET']}/{file_name}")
+        s3_client.upload_file(local_path, aws_env['AWS_BUCKET'], file_name)
+        print(f"[upload_to_cloud] Successfully uploaded to s3://{aws_env['AWS_BUCKET']}/{file_name}")
         
     except ClientError as e:
         raise Exception(f"Failed to upload file: {str(e)}")
@@ -303,7 +325,7 @@ def upload_to_cloud(file_name: str) -> None:
 
 def download_from_cloud(file_name: str) -> str:
     """
-    Download a file from S3 and save it to .reprolab_data.
+    Download a file from S3 and save it to reprolab_data.
     
     Args:
         file_name: Name of the file to download
@@ -312,33 +334,25 @@ def download_from_cloud(file_name: str) -> str:
         str: Path to the downloaded file
     
     Raises:
-        ValueError: If required environment variables are not set
+        ValueError: If required credentials are not set
         Exception: If download fails
     """
-    # Check required environment variables
-    required_vars = {
-        'AWS_BUCKET': os.getenv('AWS_BUCKET'),
-        'AWS_ACCESS_KEY_ID': os.getenv('AWS_ACCESS_KEY_ID'),
-        'AWS_SECRET_ACCESS_KEY': os.getenv('AWS_SECRET_ACCESS_KEY')
-    }
-    
-    missing_vars = [var for var, value in required_vars.items() if not value]
-    if missing_vars:
-        raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
-    
     try:
+        # Get AWS credentials
+        aws_env = get_aws_env()
+        
         # Initialize S3 client
         s3_client = boto3.client(
             's3',
-            aws_access_key_id=required_vars['AWS_ACCESS_KEY_ID'],
-            aws_secret_access_key=required_vars['AWS_SECRET_ACCESS_KEY']
+            aws_access_key_id=aws_env['AWS_ACCESS_KEY_ID'],
+            aws_secret_access_key=aws_env['AWS_SECRET_ACCESS_KEY']
         )
         
         # Create local path
         local_path = os.path.join(REPROLAB_DATA_DIR, file_name)
         
-        print(f"[download_from_cloud] Downloading s3://{required_vars['AWS_BUCKET']}/{file_name} to {local_path}")
-        s3_client.download_file(required_vars['AWS_BUCKET'], file_name, local_path)
+        print(f"[download_from_cloud] Downloading s3://{aws_env['AWS_BUCKET']}/{file_name} to {local_path}")
+        s3_client.download_file(aws_env['AWS_BUCKET'], file_name, local_path)
         print(f"[download_from_cloud] Successfully downloaded to {local_path}")
         
         return local_path

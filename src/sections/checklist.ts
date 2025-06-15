@@ -1,6 +1,6 @@
 import { createSection } from '../utils';
 
-const CHECKLIST_FILE = 'reproducibility_checklist';
+const CHECKLIST_FILE = 'reprolab_data/reproducibility_checklist.json';
 const DEFAULT_CHECKLIST = [
   'All code and data are version controlled',
   'Environment is specified (e.g., requirements.txt, environment.yml)',
