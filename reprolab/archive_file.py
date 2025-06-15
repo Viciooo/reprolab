@@ -4,7 +4,10 @@ import xarray as xr
 import json
 import gzip
 import os
-from typing import Union, Type, Dict
+import hashlib
+import inspect
+from typing import Union, Type, Dict, Callable, Any, Optional
+from functools import wraps
 
 # Define supported data types for type hints
 SupportedDataTypes = Union[
@@ -34,6 +37,71 @@ TYPE_MAPPING: Dict[str, Type[SupportedDataTypes]] = {
 
 # Reverse mapping for getting type names
 TYPE_NAME_MAPPING = {v: k for k, v in TYPE_MAPPING.items()}
+
+def _get_function_hash(func: Callable, args: tuple, kwargs: dict) -> str:
+    """
+    Calculate a unique hash for a function call based on its code and arguments.
+    
+    Args:
+        func: The function to hash
+        args: Positional arguments
+        kwargs: Keyword arguments
+    
+    Returns:
+        str: MD5 hash of the function and its arguments
+    """
+    # Get function source code
+    source = inspect.getsource(func)
+    
+    # Convert args and kwargs to a stable string representation
+    args_str = str(args)
+    kwargs_str = str(sorted(kwargs.items()))
+    
+    # Combine all components and create hash
+    hash_input = f"{source}{args_str}{kwargs_str}"
+    return hashlib.md5(hash_input.encode()).hexdigest()
+
+def persistio(func: Callable) -> Callable:
+    """
+    Decorator that caches function results using save_compact and read_compact.
+    The cache is based on a hash of the function's source code and its arguments.
+    
+    Args:
+        func: The function to cache
+    
+    Returns:
+        Callable: Decorated function that caches its results
+    """
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        # Calculate hash for this function call
+        name_hash = _get_function_hash(func, args, kwargs)
+        print(f"\n[persistio] Function: {func.__name__}")
+        print(f"[persistio] Hash: {name_hash}")
+        
+        try:
+            # Try to read from cache first
+            print("[persistio] Attempting to load from cache...")
+            result = read_compact(name_hash)
+            print("[persistio] Successfully loaded from cache!")
+            return result
+            
+        except ValueError:
+            # If not in cache, execute function
+            print("[persistio] Cache miss - executing function...")
+            result = func(*args, **kwargs)
+            
+            # Save result if it's a supported type
+            if isinstance(result, tuple(TYPE_MAPPING.values())):
+                print(f"[persistio] Saving result of type {type(result).__name__} to cache...")
+                save_compact(result, name_hash)
+                print("[persistio] Successfully saved to cache!")
+            else:
+                print(f"[persistio] Result type {type(result).__name__} not supported for caching")
+            
+            return result
+    
+    return wrapper
 
 def _get_extension(data_type: Type[SupportedDataTypes]) -> str:
     """
