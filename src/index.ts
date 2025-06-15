@@ -18,6 +18,7 @@ import {
 import { INotebookTracker } from '@jupyterlab/notebook';
 
 import { createSection, createButton, createInput, getXsrfToken } from './utils';
+import { ChecklistSection } from './sections/checklist';
 
 /** SVG string for the ReproLab icon */
 const REPROLAB_ICON_SVG = `
@@ -32,21 +33,9 @@ const reprolabIcon = new LabIcon({
   svgstr: REPROLAB_ICON_SVG
 });
 
-const CHECKLIST_FILE = 'reproducibility_checklist';
-const DEFAULT_CHECKLIST = [
-  'All code and data are version controlled',
-  'Environment is specified (e.g., requirements.txt, environment.yml)',
-  'Random seeds are set for reproducibility',
-  'Results can be regenerated with a single command',
-  'Documentation is provided for all steps',
-  'Notebooks/scripts are cleaned and annotated',
-  'External data sources are referenced and accessible'
-];
-
 /** The sidebar widget for the ReproLab panel */
 class ReprolabSidebarWidget extends Widget {
-  checklist: string[];
-  checked: Record<string, boolean>;
+  private checklistSection: ChecklistSection;
   notebooks: INotebookTracker | undefined;
   app: JupyterFrontEnd;
 
@@ -58,13 +47,11 @@ class ReprolabSidebarWidget extends Widget {
     this.title.icon = reprolabIcon;
     this.title.label = 'ReproLab';
     this.title.caption = 'ReproLab Panel';
-    this.checklist = DEFAULT_CHECKLIST;
-    this.checked = {};
-    this.checklist.forEach(item => { this.checked[item] = false; });
+    this.checklistSection = new ChecklistSection();
     this.notebooks = notebooks;
     this.app = app;
     this.render();
-    this.loadChecklistState();
+    this.checklistSection.loadChecklistState().then(() => this.render());
   }
 
   render() {
@@ -87,19 +74,8 @@ class ReprolabSidebarWidget extends Widget {
     container.appendChild(createSection('Demo', demoContent.innerHTML));
 
     // Checklist section
-    const checklistContent = `
-      <ul>
-        ${this.checklist.map(item => `
-          <li>
-            <label>
-              <input type="checkbox" data-item="${encodeURIComponent(item)}" ${this.checked[item] ? 'checked' : ''} />
-              ${item}
-            </label>
-          </li>
-        `).join('')}
-      </ul>
-    `;
-    container.appendChild(createSection('Reproducibility Checklist', checklistContent));
+    const checklistHtml = this.checklistSection.render();
+    container.appendChild(document.createRange().createContextualFragment(checklistHtml));
 
     // Archive section
     const archiveContent = document.createElement('div');
@@ -198,7 +174,7 @@ class ReprolabSidebarWidget extends Widget {
 
     // Checkbox handlers
     this.node.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.addEventListener('change', (event: Event) => this.handleCheckboxChange(event));
+      cb.addEventListener('change', (event: Event) => this.checklistSection.handleCheckboxChange(event));
     });
 
     // Metrics button handler
@@ -275,13 +251,6 @@ class ReprolabSidebarWidget extends Widget {
     const secretKey = (this.node.querySelector('#reprolab-archive-input2') as HTMLInputElement)?.value || '';
     const endpointUrl = (this.node.querySelector('#reprolab-archive-input3') as HTMLInputElement)?.value || '';
     console.log('[ReproLab Archive Save]', { accessKey, secretKey, endpointUrl });
-  }
-
-  private handleCheckboxChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const item = decodeURIComponent(target.getAttribute('data-item') || '');
-    this.checked[item] = target.checked;
-    this.saveChecklistState();
   }
 
   private handleMetricsButton() {
@@ -391,58 +360,6 @@ ${packages.map(pkg => `    - ${pkg}`).join('\n')}`;
     const tagInput = this.node.querySelector('#reprolab-experiment-tag') as HTMLInputElement;
     const tag = tagInput.value;
     console.log(`[ReproLab] Creating experiment with tag: ${tag}`);
-  }
-
-  async loadChecklistState() {
-    try {
-      const response = await fetch(`/api/contents/${CHECKLIST_FILE}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.content) {
-          const parsed = JSON.parse(data.content);
-          if (typeof parsed === 'object' && parsed !== null) {
-            // Only keep keys that are in the current checklist
-            this.checked = {};
-            this.checklist.forEach(item => {
-              this.checked[item] = !!parsed[item];
-            });
-            this.render();
-          }
-        }
-      } else if (response.status === 404) {
-        // File does not exist, create it with all unchecked
-        this.checked = {};
-        this.checklist.forEach(item => { this.checked[item] = false; });
-        await this.saveChecklistState();
-        this.render();
-      }
-    } catch (e) {
-      // Could not load or parse, fallback to all unchecked
-      this.checked = {};
-      this.checklist.forEach(item => { this.checked[item] = false; });
-      await this.saveChecklistState();
-      this.render();
-    }
-  }
-
-  async saveChecklistState() {
-    try {
-      const xsrfToken = getXsrfToken();
-      await fetch(`/api/contents/${CHECKLIST_FILE}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(xsrfToken ? { 'X-XSRFToken': xsrfToken } : {})
-        },
-        body: JSON.stringify({
-          type: 'file',
-          format: 'text',
-          content: JSON.stringify(this.checked)
-        })
-      });
-    } catch (e) {
-      // Could not save
-    }
   }
 }
 
