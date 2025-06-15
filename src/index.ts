@@ -17,12 +17,14 @@ import {
 
 import { INotebookTracker } from '@jupyterlab/notebook';
 
-import { createSection, createButton, createInput } from './utils';
+import { createButton } from './utils';
 import { ChecklistSection } from './sections/checklist';
 import { DemoSection } from './sections/demo';
 import { ArchiveSection } from './sections/archive';
 import { MetricsSection } from './sections/metrics';
 import { DependenciesSection } from './sections/dependencies';
+import { ZenodoSection } from './sections/zenodo';
+import { ExperimentSection } from './sections/experiment';
 
 /** SVG string for the ReproLab icon */
 const REPROLAB_ICON_SVG = `
@@ -44,6 +46,8 @@ class ReprolabSidebarWidget extends Widget {
   private archiveSection: ArchiveSection;
   private metricsSection: MetricsSection;
   private dependenciesSection: DependenciesSection;
+  private zenodoSection: ZenodoSection;
+  private experimentSection: ExperimentSection;
   notebooks: INotebookTracker | undefined;
   app: JupyterFrontEnd;
 
@@ -60,6 +64,8 @@ class ReprolabSidebarWidget extends Widget {
     this.archiveSection = new ArchiveSection();
     this.metricsSection = new MetricsSection(notebooks);
     this.dependenciesSection = new DependenciesSection(app, notebooks);
+    this.zenodoSection = new ZenodoSection();
+    this.experimentSection = new ExperimentSection();
     this.notebooks = notebooks;
     this.app = app;
     this.render();
@@ -100,32 +106,12 @@ class ReprolabSidebarWidget extends Widget {
     container.appendChild(document.createRange().createContextualFragment(depsHtml));
 
     // Zenodo section
-    const zenodoContent = document.createElement('div');
-    zenodoContent.innerHTML = '<p>You can in a few steps download the raw datasets and save the snapshots of software to the Zenodo for archiving</p>';
-    zenodoContent.appendChild(createButton('reprolab-zenodo-more', 'See more'));
-    container.appendChild(createSection('Publishing software and data to Zenodo', zenodoContent.innerHTML));
+    const zenodoHtml = this.zenodoSection.render();
+    container.appendChild(document.createRange().createContextualFragment(zenodoHtml));
 
     // Experiment section
-    const experimentContent = document.createElement('div');
-    experimentContent.innerHTML = '<p>For reproducible experiments its crucial to preserve exact immutable snapshot of software. Creating experiments using ReproLab executes your notebook code top to bottom and saves the end result under git tag.</p>';
-    
-    const experimentInput = document.createElement('div');
-    experimentInput.className = 'reprolab-experiment-input';
-    
-    const label = document.createElement('label');
-    label.className = 'reprolab-experiment-label';
-    label.textContent = 'Suggested tag:';
-    label.htmlFor = 'reprolab-experiment-tag';
-    
-    const input = createInput('reprolab-experiment-tag', 'text', '');
-    input.value = 'v1.0.0';
-    
-    experimentInput.appendChild(label);
-    experimentInput.appendChild(input);
-    experimentInput.appendChild(createButton('reprolab-create-experiment', 'Create experiment'));
-    
-    experimentContent.appendChild(experimentInput);
-    container.appendChild(createSection('Create experiment', experimentContent.innerHTML));
+    const experimentHtml = this.experimentSection.render();
+    container.appendChild(document.createRange().createContextualFragment(experimentHtml));
 
     // Set the container as the widget's content
     this.node.innerHTML = '';
@@ -190,9 +176,7 @@ class ReprolabSidebarWidget extends Widget {
     // Zenodo button handler
     const zenodoBtn = this.node.querySelector('#reprolab-zenodo-more');
     if (zenodoBtn) {
-      zenodoBtn.addEventListener('click', () => {
-        modal.style.display = 'flex';
-      });
+      zenodoBtn.addEventListener('click', () => this.zenodoSection.handleZenodoButton(modal));
     }
 
     // Modal close button handler
@@ -221,14 +205,8 @@ class ReprolabSidebarWidget extends Widget {
     // Create experiment button handler
     const createExperimentBtn = this.node.querySelector('#reprolab-create-experiment');
     if (createExperimentBtn) {
-      createExperimentBtn.addEventListener('click', () => this.handleCreateExperiment());
+      createExperimentBtn.addEventListener('click', () => this.experimentSection.handleCreateExperiment(this.node));
     }
-  }
-
-  private handleCreateExperiment() {
-    const tagInput = this.node.querySelector('#reprolab-experiment-tag') as HTMLInputElement;
-    const tag = tagInput.value;
-    console.log(`[ReproLab] Creating experiment with tag: ${tag}`);
   }
 }
 
