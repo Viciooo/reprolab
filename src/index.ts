@@ -217,6 +217,35 @@ class ReprolabSidebarWidget extends Widget {
     `;
     this.node.appendChild(zenodoSection);
 
+    // Add Create Experiment section
+    const experimentSection = document.createElement('div');
+    experimentSection.className = 'reprolab-section';
+    experimentSection.innerHTML = `
+      <h3>Create experiment</h3>
+      <p>For reproducible experiments its crucial to preserve exact immutable snapshot of software. Creating experiments using ReproLab executes your notebook code top to bottom and saves the end result under git tag.</p>
+      <div style="margin-top: 15px;">
+        <label for="reprolab-experiment-tag" style="display: block; margin-bottom: 5px;">Suggested tag:</label>
+        <input 
+          type="text" 
+          id="reprolab-experiment-tag" 
+          value="v1.0.0" 
+          style="padding: 6px; font-size: 1em; width: 100%; margin-bottom: 10px;"
+        />
+        <button id="reprolab-create-experiment" class="reprolab-button">Create experiment</button>
+      </div>
+    `;
+    this.node.appendChild(experimentSection);
+
+    // Add event listener for the create experiment button
+    const createExperimentBtn = this.node.querySelector('#reprolab-create-experiment') as HTMLButtonElement;
+    createExperimentBtn.setAttribute('style', (createExperimentBtn.getAttribute('style') || '') + 'cursor:pointer;');
+    createExperimentBtn.addEventListener('click', () => {
+      const tagInput = this.node.querySelector('#reprolab-experiment-tag') as HTMLInputElement;
+      const tag = tagInput.value;
+      console.log(`[ReproLab] Creating experiment with tag: ${tag}`);
+      // TODO: Implement experiment creation logic
+    });
+
     // Create modal
     const modal = document.createElement('div');
     modal.className = 'reprolab-modal';
