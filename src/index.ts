@@ -17,6 +17,8 @@ import {
 
 import { INotebookTracker } from '@jupyterlab/notebook';
 
+import { createSection, createButton, createInput, getXsrfToken } from './utils';
+
 /** SVG string for the ReproLab icon */
 const REPROLAB_ICON_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="16" viewBox="0 0 24 24">
@@ -40,11 +42,6 @@ const DEFAULT_CHECKLIST = [
   'Notebooks/scripts are cleaned and annotated',
   'External data sources are referenced and accessible'
 ];
-
-function getXsrfToken(): string | null {
-  const match = document.cookie.match('\\b_xsrf=([^;]*)\\b');
-  return match ? decodeURIComponent(match[1]) : null;
-}
 
 /** The sidebar widget for the ReproLab panel */
 class ReprolabSidebarWidget extends Widget {
@@ -71,233 +68,174 @@ class ReprolabSidebarWidget extends Widget {
   }
 
   render() {
-    this.node.innerHTML = `
-      <div class="reprolab-header">
-        <h1>ReproLab</h1>
-        <h3>One step closer to accessible reproducible research</h3>
-      </div>
-      <div class="reprolab-demo">
-        <h2>Demo</h2>
-        <p>Press the button below to add a demo cell to the top of the active notebook. The cell will explain how to use the ReproLab extension.</p>
-        <button id="reprolab-demo-btn" style="padding: 8px; font-size: 1em; margin-bottom: 12px;">Add Demo Cell</button>
-      </div>
-      <div class="reprolab-checklist">
-        <h2>Reproducibility Checklist</h2>
-        <ul style="list-style: none; padding: 0;">
-          ${this.checklist.map(item => `
-            <li>
-              <label style="cursor:pointer;">
-                <input type="checkbox" data-item="${encodeURIComponent(item)}" ${this.checked[item] ? 'checked' : ''} />
-                ${item}
-              </label>
-            </li>
-          `).join('')}
-        </ul>
-      </div>
-      <div class="reprolab-archive">
-        <h2>Archiving data</h2>
-        <p>Currently supports s3 and minio</p>
-        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
-          <input id="reprolab-archive-input1" type="password" placeholder="Access Key" style="padding: 6px; font-size: 1em;" />
-          <input id="reprolab-archive-input2" type="password" placeholder="Secret Key" style="padding: 6px; font-size: 1em;" />
-          <input id="reprolab-archive-input3" type="text" placeholder="Endpoint URL" style="padding: 6px; font-size: 1em;" />
-          <button id="reprolab-archive-save" style="padding: 8px; font-size: 1em; margin-top: 8px;">Save</button>
-        </div>
-      </div>
+    // Create main container
+    const container = document.createElement('div');
+    
+    // Header section
+    const header = document.createElement('div');
+    header.className = 'reprolab-header';
+    header.innerHTML = `
+      <h1>ReproLab</h1>
+      <h3>One step closer to accessible reproducible research</h3>
     `;
+    container.appendChild(header);
 
+    // Demo section
+    const demoContent = document.createElement('div');
+    demoContent.innerHTML = '<p>Press the button below to add a demo cell to the top of the active notebook. The cell will explain how to use the ReproLab extension.</p>';
+    demoContent.appendChild(createButton('reprolab-demo-btn', 'Add Demo Cell'));
+    container.appendChild(createSection('Demo', demoContent.innerHTML));
+
+    // Checklist section
+    const checklistContent = `
+      <ul>
+        ${this.checklist.map(item => `
+          <li>
+            <label>
+              <input type="checkbox" data-item="${encodeURIComponent(item)}" ${this.checked[item] ? 'checked' : ''} />
+              ${item}
+            </label>
+          </li>
+        `).join('')}
+      </ul>
+    `;
+    container.appendChild(createSection('Reproducibility Checklist', checklistContent));
+
+    // Archive section
+    const archiveContent = document.createElement('div');
+    archiveContent.innerHTML = '<p>Currently supports s3 and minio</p>';
+    const archiveInputs = document.createElement('div');
+    archiveInputs.className = 'reprolab-archive-inputs';
+    
+    archiveInputs.appendChild(createInput('reprolab-archive-input1', 'password', 'Access Key'));
+    archiveInputs.appendChild(createInput('reprolab-archive-input2', 'password', 'Secret Key'));
+    archiveInputs.appendChild(createInput('reprolab-archive-input3', 'text', 'Endpoint URL'));
+    archiveInputs.appendChild(createButton('reprolab-archive-save', 'Save'));
+    
+    archiveContent.appendChild(archiveInputs);
+    container.appendChild(createSection('Archiving data', archiveContent.innerHTML));
+
+    // Run Metrics section
+    const metricsContent = document.createElement('div');
+    metricsContent.appendChild(createButton('reprolab-add-metrics', 'Add Run Metrics'));
+    container.appendChild(createSection('Run Metrics', metricsContent.innerHTML));
+
+    // Dependencies section
+    const depsContent = document.createElement('div');
+    depsContent.appendChild(createButton('reprolab-gather-deps', 'Do it'));
+    container.appendChild(createSection('Gather and pin dependencies', depsContent.innerHTML));
+
+    // Zenodo section
+    const zenodoContent = document.createElement('div');
+    zenodoContent.innerHTML = '<p>You can in a few steps download the raw datasets and save the snapshots of software to the Zenodo for archiving</p>';
+    zenodoContent.appendChild(createButton('reprolab-zenodo-more', 'See more'));
+    container.appendChild(createSection('Publishing software and data to Zenodo', zenodoContent.innerHTML));
+
+    // Experiment section
+    const experimentContent = document.createElement('div');
+    experimentContent.innerHTML = '<p>For reproducible experiments its crucial to preserve exact immutable snapshot of software. Creating experiments using ReproLab executes your notebook code top to bottom and saves the end result under git tag.</p>';
+    
+    const experimentInput = document.createElement('div');
+    experimentInput.className = 'reprolab-experiment-input';
+    
+    const label = document.createElement('label');
+    label.className = 'reprolab-experiment-label';
+    label.textContent = 'Suggested tag:';
+    label.htmlFor = 'reprolab-experiment-tag';
+    
+    const input = createInput('reprolab-experiment-tag', 'text', '');
+    input.value = 'v1.0.0';
+    
+    experimentInput.appendChild(label);
+    experimentInput.appendChild(input);
+    experimentInput.appendChild(createButton('reprolab-create-experiment', 'Create experiment'));
+    
+    experimentContent.appendChild(experimentInput);
+    container.appendChild(createSection('Create experiment', experimentContent.innerHTML));
+
+    // Set the container as the widget's content
+    this.node.innerHTML = '';
+    this.node.appendChild(container);
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'reprolab-modal';
+    const modalContent = document.createElement('div');
+    modalContent.className = 'reprolab-modal-content';
+    
+    const closeButton = document.createElement('span');
+    closeButton.className = 'reprolab-modal-close';
+    closeButton.textContent = '×';
+    
+    const modalText = document.createElement('p');
+    modalText.textContent = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.';
+    
+    const testButton = createButton('reprolab-modal-test', 'Test');
+    
+    modalContent.appendChild(closeButton);
+    modalContent.appendChild(modalText);
+    modalContent.appendChild(testButton);
+    
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+
+    // Add event listeners
+    this.setupEventListeners(modal);
+  }
+
+  private setupEventListeners(modal: HTMLElement) {
     // Demo button handler
     const demoBtn = this.node.querySelector('#reprolab-demo-btn');
     if (demoBtn) {
-      demoBtn.setAttribute('style', (demoBtn.getAttribute('style') || '') + 'cursor:pointer;');
-      demoBtn.addEventListener('click', () => {
-        if (this.notebooks && this.notebooks.currentWidget) {
-          const notebook = this.notebooks.currentWidget.content;
-          // Select the first cell (if any exist) or ensure a cell exists
-          if (notebook.model && notebook.model.cells.length > 0) {
-            notebook.activeCellIndex = 0;
-          } else {
-            // If no cells exist, insert one to start with
-            this.app.commands.execute('notebook:insert-cell-below');
-            notebook.activeCellIndex = 0;
-          }
-          // Insert a new cell above the first cell (becomes the new top cell)
-          this.app.commands.execute('notebook:insert-cell-above');
-          // Directly set the content of the new cell (now at index 0)
-          if (notebook.model && notebook.model.cells.length > 0) {
-            const cell = notebook.model.cells.get(0);
-            if (cell) {
-              cell.sharedModel.setSource('# test');
-            } else {
-              console.error('[ReproLab] Failed to access the new cell');
-            }
-          } else {
-            console.error('[ReproLab] No cells available after insertion');
-          }
-        } else {
-          console.error('[ReproLab] No active notebook found');
-        }
-      });
+      demoBtn.addEventListener('click', () => this.handleDemoButton());
     }
 
     // Save button handler
     const saveBtn = this.node.querySelector('#reprolab-archive-save');
     if (saveBtn) {
-      saveBtn.addEventListener('click', () => {
-        const accessKey = (this.node.querySelector('#reprolab-archive-input1') as HTMLInputElement)?.value || '';
-        const secretKey = (this.node.querySelector('#reprolab-archive-input2') as HTMLInputElement)?.value || '';
-        const endpointUrl = (this.node.querySelector('#reprolab-archive-input3') as HTMLInputElement)?.value || '';
-        // Simulate saving to environment variables by logging
-        console.log('[ReproLab Archive Save]', { accessKey, secretKey, endpointUrl });
-        // In the future, save to backend/environment here
+      saveBtn.addEventListener('click', () => this.handleSaveButton());
+    }
+
+    // Checkbox handlers
+    this.node.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', (event: Event) => this.handleCheckboxChange(event));
+    });
+
+    // Metrics button handler
+    const metricsBtn = this.node.querySelector('#reprolab-add-metrics');
+    if (metricsBtn) {
+      metricsBtn.addEventListener('click', () => this.handleMetricsButton());
+    }
+
+    // Dependencies button handler
+    const depsBtn = this.node.querySelector('#reprolab-gather-deps');
+    if (depsBtn) {
+      depsBtn.addEventListener('click', () => this.handleDependenciesButton());
+    }
+
+    // Zenodo button handler
+    const zenodoBtn = this.node.querySelector('#reprolab-zenodo-more');
+    if (zenodoBtn) {
+      zenodoBtn.addEventListener('click', () => {
+        modal.style.display = 'flex';
       });
     }
 
-    // Add event listeners for checkboxes
-    this.node.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.addEventListener('change', (event: Event) => {
-        const target = event.target as HTMLInputElement;
-        const item = decodeURIComponent(target.getAttribute('data-item') || '');
-        this.checked[item] = target.checked;
-        this.saveChecklistState();
+    // Modal close button handler
+    const closeBtn = modal.querySelector('.reprolab-modal-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
       });
-    });
+    }
 
-    // Add Run Metrics section
-    const runMetricsSection = document.createElement('div');
-    runMetricsSection.className = 'reprolab-section';
-    runMetricsSection.innerHTML = `
-      <h3>Run Metrics</h3>
-      <button id="reprolab-add-metrics" class="reprolab-button">Add Run Metrics</button>
-    `;
-    this.node.appendChild(runMetricsSection);
-
-    // Add event listener for the metrics button
-    const metricsBtn = this.node.querySelector('#reprolab-add-metrics') as HTMLButtonElement;
-    metricsBtn.setAttribute('style', (metricsBtn.getAttribute('style') || '') + 'cursor:pointer;');
-    metricsBtn.addEventListener('click', () => {
-      if (this.notebooks && this.notebooks.currentWidget) {
-        const notebook = this.notebooks.currentWidget.content;
-        if (notebook.model && notebook.model.cells.length > 0) {
-          // Process each cell
-          for (let i = 0; i < notebook.model.cells.length; i++) {
-            const cell = notebook.model.cells.get(i);
-            if (cell) {
-              // Get current content
-              const currentContent = cell.sharedModel.source;
-              // Add markers
-              cell.sharedModel.setSource(`#start\n${currentContent}\n#end`);
-            }
-          }
-          console.log('[ReproLab] Added run metrics to all cells');
-        } else {
-          console.error('[ReproLab] No cells available in notebook');
-        }
-      } else {
-        console.error('[ReproLab] No active notebook found');
-      }
-    });
-
-    // Add Dependencies section
-    const depsSection = document.createElement('div');
-    depsSection.className = 'reprolab-section';
-    depsSection.innerHTML = `
-      <h3>Gather and pin dependencies</h3>
-      <button id="reprolab-gather-deps" class="reprolab-button">Do it</button>
-    `;
-    this.node.appendChild(depsSection);
-
-    // Add Zenodo section
-    const zenodoSection = document.createElement('div');
-    zenodoSection.className = 'reprolab-section';
-    zenodoSection.innerHTML = `
-      <h3>Publishing software and data to Zenodo</h3>
-      <p>You can in a few steps download the raw datasets and save the snapshots of software to the Zenodo for archiving</p>
-      <button id="reprolab-zenodo-more" class="reprolab-button">See more</button>
-    `;
-    this.node.appendChild(zenodoSection);
-
-    // Add Create Experiment section
-    const experimentSection = document.createElement('div');
-    experimentSection.className = 'reprolab-section';
-    experimentSection.innerHTML = `
-      <h3>Create experiment</h3>
-      <p>For reproducible experiments its crucial to preserve exact immutable snapshot of software. Creating experiments using ReproLab executes your notebook code top to bottom and saves the end result under git tag.</p>
-      <div style="margin-top: 15px;">
-        <label for="reprolab-experiment-tag" style="display: block; margin-bottom: 5px;">Suggested tag:</label>
-        <input 
-          type="text" 
-          id="reprolab-experiment-tag" 
-          value="v1.0.0" 
-          style="padding: 6px; font-size: 1em; width: 100%; margin-bottom: 10px;"
-        />
-        <button id="reprolab-create-experiment" class="reprolab-button">Create experiment</button>
-      </div>
-    `;
-    this.node.appendChild(experimentSection);
-
-    // Add event listener for the create experiment button
-    const createExperimentBtn = this.node.querySelector('#reprolab-create-experiment') as HTMLButtonElement;
-    createExperimentBtn.setAttribute('style', (createExperimentBtn.getAttribute('style') || '') + 'cursor:pointer;');
-    createExperimentBtn.addEventListener('click', () => {
-      const tagInput = this.node.querySelector('#reprolab-experiment-tag') as HTMLInputElement;
-      const tag = tagInput.value;
-      console.log(`[ReproLab] Creating experiment with tag: ${tag}`);
-      // TODO: Implement experiment creation logic
-    });
-
-    // Create modal
-    const modal = document.createElement('div');
-    modal.className = 'reprolab-modal';
-    modal.style.display = 'none';
-    modal.style.position = 'fixed';
-    modal.style.zIndex = '1000';
-    modal.style.left = '0';
-    modal.style.top = '0';
-    modal.style.width = '100%';
-    modal.style.height = '100%';
-    modal.style.backgroundColor = 'rgba(0,0,0,0.4)';
-    modal.style.display = 'none';
-    modal.style.justifyContent = 'center';
-    modal.style.alignItems = 'center';
-
-    const modalContent = document.createElement('div');
-    modalContent.style.backgroundColor = '#fefefe';
-    modalContent.style.margin = '15% auto';
-    modalContent.style.padding = '20px';
-    modalContent.style.border = '1px solid #888';
-    modalContent.style.width = '80%';
-    modalContent.style.maxWidth = '500px';
-    modalContent.style.borderRadius = '5px';
-    modalContent.style.position = 'relative';
-
-    modalContent.innerHTML = `
-      <span class="reprolab-close" style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
-      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
-      <button id="reprolab-modal-test" class="reprolab-button" style="margin-top: 20px;">Test</button>
-    `;
-
-    modal.appendChild(modalContent);
-    document.body.appendChild(modal);
-
-    // Add event listener for the Zenodo "See more" button
-    const zenodoBtn = this.node.querySelector('#reprolab-zenodo-more') as HTMLButtonElement;
-    zenodoBtn.setAttribute('style', (zenodoBtn.getAttribute('style') || '') + 'cursor:pointer;');
-    zenodoBtn.addEventListener('click', () => {
-      modal.style.display = 'flex';
-    });
-
-    // Add event listener for the modal close button
-    const closeBtn = modal.querySelector('.reprolab-close') as HTMLElement;
-    closeBtn.addEventListener('click', () => {
-      modal.style.display = 'none';
-    });
-
-    // Add event listener for the modal test button
-    const modalTestBtn = modal.querySelector('#reprolab-modal-test') as HTMLButtonElement;
-    modalTestBtn.addEventListener('click', () => {
-      console.log('test from the modal');
-    });
+    // Modal test button handler
+    const modalTestBtn = modal.querySelector('#reprolab-modal-test');
+    if (modalTestBtn) {
+      modalTestBtn.addEventListener('click', () => {
+        console.log('test from the modal');
+      });
+    }
 
     // Close modal when clicking outside
     modal.addEventListener('click', (event) => {
@@ -306,40 +244,95 @@ class ReprolabSidebarWidget extends Widget {
       }
     });
 
-    // Add event listener for the dependencies button
-    const depsBtn = this.node.querySelector('#reprolab-gather-deps') as HTMLButtonElement;
-    depsBtn.setAttribute('style', (depsBtn.getAttribute('style') || '') + 'cursor:pointer;');
-    depsBtn.addEventListener('click', () => {
-      if (this.notebooks && this.notebooks.currentWidget) {
-        const notebook = this.notebooks.currentWidget.content;
-        if (notebook.model && notebook.model.cells.length > 0) {
-          console.log('[ReproLab] Gathering dependencies...');
-          
-          // Extract pip commands from cells
-          const pipCommands = new Set<string>();
-          for (let i = 0; i < notebook.model.cells.length; i++) {
-            const cell = notebook.model.cells.get(i);
-            if (cell.type === 'code') {
-              const source = cell.sharedModel.getSource();
-              const matches = source.match(/!pip install ([^\n]+)/g);
-              if (matches) {
-                matches.forEach((match: string) => {
-                  const packages = match.replace('!pip install', '').trim().split(/\s+/);
-                  packages.forEach((pkg: string) => pipCommands.add(pkg.trim()));
-                });
-                // Remove the pip install commands from the cell
-                const cleanedSource = source.replace(/!pip install [^\n]+\n?/g, '').trim();
-                cell.sharedModel.setSource(cleanedSource);
-              }
+    // Create experiment button handler
+    const createExperimentBtn = this.node.querySelector('#reprolab-create-experiment');
+    if (createExperimentBtn) {
+      createExperimentBtn.addEventListener('click', () => this.handleCreateExperiment());
+    }
+  }
+
+  private handleDemoButton() {
+    if (this.notebooks && this.notebooks.currentWidget) {
+      const notebook = this.notebooks.currentWidget.content;
+      if (notebook.model && notebook.model.cells.length > 0) {
+        notebook.activeCellIndex = 0;
+      } else {
+        this.app.commands.execute('notebook:insert-cell-below');
+        notebook.activeCellIndex = 0;
+      }
+      this.app.commands.execute('notebook:insert-cell-above');
+      if (notebook.model && notebook.model.cells.length > 0) {
+        const cell = notebook.model.cells.get(0);
+        if (cell) {
+          cell.sharedModel.setSource('# test');
+        }
+      }
+    }
+  }
+
+  private handleSaveButton() {
+    const accessKey = (this.node.querySelector('#reprolab-archive-input1') as HTMLInputElement)?.value || '';
+    const secretKey = (this.node.querySelector('#reprolab-archive-input2') as HTMLInputElement)?.value || '';
+    const endpointUrl = (this.node.querySelector('#reprolab-archive-input3') as HTMLInputElement)?.value || '';
+    console.log('[ReproLab Archive Save]', { accessKey, secretKey, endpointUrl });
+  }
+
+  private handleCheckboxChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const item = decodeURIComponent(target.getAttribute('data-item') || '');
+    this.checked[item] = target.checked;
+    this.saveChecklistState();
+  }
+
+  private handleMetricsButton() {
+    if (this.notebooks && this.notebooks.currentWidget) {
+      const notebook = this.notebooks.currentWidget.content;
+      if (notebook.model && notebook.model.cells.length > 0) {
+        for (let i = 0; i < notebook.model.cells.length; i++) {
+          const cell = notebook.model.cells.get(i);
+          if (cell) {
+            const currentContent = cell.sharedModel.source;
+            cell.sharedModel.setSource(`#start\n${currentContent}\n#end`);
+          }
+        }
+        console.log('[ReproLab] Added run metrics to all cells');
+      }
+    }
+  }
+
+  private handleDependenciesButton() {
+    if (this.notebooks && this.notebooks.currentWidget) {
+      const notebook = this.notebooks.currentWidget.content;
+      if (notebook.model && notebook.model.cells.length > 0) {
+        console.log('[ReproLab] Gathering dependencies...');
+        const pipCommands = new Set<string>();
+        
+        for (let i = 0; i < notebook.model.cells.length; i++) {
+          const cell = notebook.model.cells.get(i);
+          if (cell.type === 'code') {
+            const source = cell.sharedModel.getSource();
+            const matches = source.match(/!pip install ([^\n]+)/g);
+            if (matches) {
+              matches.forEach((match: string) => {
+                const packages = match.replace('!pip install', '').trim().split(/\s+/);
+                packages.forEach((pkg: string) => pipCommands.add(pkg.trim()));
+              });
+              const cleanedSource = source.replace(/!pip install [^\n]+\n?/g, '').trim();
+              cell.sharedModel.setSource(cleanedSource);
             }
           }
+        }
 
-          const packages = Array.from(pipCommands).sort();
-          console.log('[ReproLab] Found packages:', packages);
+        const packages = Array.from(pipCommands).sort();
+        if (packages.length > 0) {
+          this.createEnvironmentYaml(packages);
+        }
+      }
+    }
+  }
 
-          if (packages.length > 0) {
-            // Create environment.yaml content
-            const envYaml = `name: reprolab-env
+  private async createEnvironmentYaml(packages: string[]) {
+    const envYaml = `name: reprolab-env
 channels:
   - conda-forge
   - defaults
@@ -348,60 +341,56 @@ dependencies:
   - pip:
 ${packages.map(pkg => `    - ${pkg}`).join('\n')}`;
 
-            // Save environment.yaml using content API
-            const xsrfToken = getXsrfToken();
-            fetch('/api/contents/environment.yaml', {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(xsrfToken ? { 'X-XSRFToken': xsrfToken } : {})
-              },
-              body: JSON.stringify({
-                type: 'file',
-                format: 'text',
-                content: envYaml
-              })
-            }).then(response => {
-              if (response.ok) {
-                console.log('[ReproLab] Created environment.yaml');
-                
-                // Select the first cell (if any exist) or ensure a cell exists
-                if (notebook.model && notebook.model.cells.length > 0) {
-                  notebook.activeCellIndex = 0;
-                } else {
-                  // If no cells exist, insert one to start with
-                  this.app.commands.execute('notebook:insert-cell-below');
-                  notebook.activeCellIndex = 0;
-                }
+    const xsrfToken = getXsrfToken();
+    try {
+      const response = await fetch('/api/contents/environment.yaml', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(xsrfToken ? { 'X-XSRFToken': xsrfToken } : {})
+        },
+        body: JSON.stringify({
+          type: 'file',
+          format: 'text',
+          content: envYaml
+        })
+      });
 
-                // Insert a new cell above the first cell (becomes the new top cell)
-                this.app.commands.execute('notebook:insert-cell-above');
-                // Directly set the content of the new cell (now at index 0)
-                if (notebook.model && notebook.model.cells.length > 0) {
-                  const cell = notebook.model.cells.get(0);
-                  if (cell) {
-                    cell.sharedModel.setSource(`# Install dependencies from environment.yaml
-!conda env update -f environment.yaml --prune`);
-                  } else {
-                    console.error('[ReproLab] Failed to access the new cell');
-                  }
-                }
-              } else {
-                console.error('[ReproLab] Failed to create environment.yaml');
-              }
-            }).catch(error => {
-              console.error('[ReproLab] Error creating environment.yaml:', error);
-            });
-          } else {
-            console.log('[ReproLab] No pip install commands found in notebook');
-          }
-        } else {
-          console.error('[ReproLab] No cells available in notebook');
-        }
+      if (response.ok) {
+        console.log('[ReproLab] Created environment.yaml');
+        this.addEnvironmentCell();
       } else {
-        console.error('[ReproLab] No active notebook found');
+        console.error('[ReproLab] Failed to create environment.yaml');
       }
-    });
+    } catch (error) {
+      console.error('[ReproLab] Error creating environment.yaml:', error);
+    }
+  }
+
+  private addEnvironmentCell() {
+    if (this.notebooks && this.notebooks.currentWidget) {
+      const notebook = this.notebooks.currentWidget.content;
+      if (notebook.model && notebook.model.cells.length > 0) {
+        notebook.activeCellIndex = 0;
+      } else {
+        this.app.commands.execute('notebook:insert-cell-below');
+        notebook.activeCellIndex = 0;
+      }
+      this.app.commands.execute('notebook:insert-cell-above');
+      if (notebook.model && notebook.model.cells.length > 0) {
+        const cell = notebook.model.cells.get(0);
+        if (cell) {
+          cell.sharedModel.setSource(`# Install dependencies from environment.yaml
+!conda env update -f environment.yaml --prune`);
+        }
+      }
+    }
+  }
+
+  private handleCreateExperiment() {
+    const tagInput = this.node.querySelector('#reprolab-experiment-tag') as HTMLInputElement;
+    const tag = tagInput.value;
+    console.log(`[ReproLab] Creating experiment with tag: ${tag}`);
   }
 
   async loadChecklistState() {
