@@ -17,8 +17,12 @@ import {
 
 import { INotebookTracker } from '@jupyterlab/notebook';
 
-import { createSection, createButton, createInput, getXsrfToken } from './utils';
+import { createSection, createButton, createInput } from './utils';
 import { ChecklistSection } from './sections/checklist';
+import { DemoSection } from './sections/demo';
+import { ArchiveSection } from './sections/archive';
+import { MetricsSection } from './sections/metrics';
+import { DependenciesSection } from './sections/dependencies';
 
 /** SVG string for the ReproLab icon */
 const REPROLAB_ICON_SVG = `
@@ -36,6 +40,10 @@ const reprolabIcon = new LabIcon({
 /** The sidebar widget for the ReproLab panel */
 class ReprolabSidebarWidget extends Widget {
   private checklistSection: ChecklistSection;
+  private demoSection: DemoSection;
+  private archiveSection: ArchiveSection;
+  private metricsSection: MetricsSection;
+  private dependenciesSection: DependenciesSection;
   notebooks: INotebookTracker | undefined;
   app: JupyterFrontEnd;
 
@@ -48,6 +56,10 @@ class ReprolabSidebarWidget extends Widget {
     this.title.label = 'ReproLab';
     this.title.caption = 'ReproLab Panel';
     this.checklistSection = new ChecklistSection();
+    this.demoSection = new DemoSection(app, notebooks);
+    this.archiveSection = new ArchiveSection();
+    this.metricsSection = new MetricsSection(notebooks);
+    this.dependenciesSection = new DependenciesSection(app, notebooks);
     this.notebooks = notebooks;
     this.app = app;
     this.render();
@@ -68,38 +80,24 @@ class ReprolabSidebarWidget extends Widget {
     container.appendChild(header);
 
     // Demo section
-    const demoContent = document.createElement('div');
-    demoContent.innerHTML = '<p>Press the button below to add a demo cell to the top of the active notebook. The cell will explain how to use the ReproLab extension.</p>';
-    demoContent.appendChild(createButton('reprolab-demo-btn', 'Add Demo Cell'));
-    container.appendChild(createSection('Demo', demoContent.innerHTML));
+    const demoHtml = this.demoSection.render();
+    container.appendChild(document.createRange().createContextualFragment(demoHtml));
 
     // Checklist section
     const checklistHtml = this.checklistSection.render();
     container.appendChild(document.createRange().createContextualFragment(checklistHtml));
 
     // Archive section
-    const archiveContent = document.createElement('div');
-    archiveContent.innerHTML = '<p>Currently supports s3 and minio</p>';
-    const archiveInputs = document.createElement('div');
-    archiveInputs.className = 'reprolab-archive-inputs';
-    
-    archiveInputs.appendChild(createInput('reprolab-archive-input1', 'password', 'Access Key'));
-    archiveInputs.appendChild(createInput('reprolab-archive-input2', 'password', 'Secret Key'));
-    archiveInputs.appendChild(createInput('reprolab-archive-input3', 'text', 'Endpoint URL'));
-    archiveInputs.appendChild(createButton('reprolab-archive-save', 'Save'));
-    
-    archiveContent.appendChild(archiveInputs);
-    container.appendChild(createSection('Archiving data', archiveContent.innerHTML));
+    const archiveHtml = this.archiveSection.render();
+    container.appendChild(document.createRange().createContextualFragment(archiveHtml));
 
     // Run Metrics section
-    const metricsContent = document.createElement('div');
-    metricsContent.appendChild(createButton('reprolab-add-metrics', 'Add Run Metrics'));
-    container.appendChild(createSection('Run Metrics', metricsContent.innerHTML));
+    const metricsHtml = this.metricsSection.render();
+    container.appendChild(document.createRange().createContextualFragment(metricsHtml));
 
     // Dependencies section
-    const depsContent = document.createElement('div');
-    depsContent.appendChild(createButton('reprolab-gather-deps', 'Do it'));
-    container.appendChild(createSection('Gather and pin dependencies', depsContent.innerHTML));
+    const depsHtml = this.dependenciesSection.render();
+    container.appendChild(document.createRange().createContextualFragment(depsHtml));
 
     // Zenodo section
     const zenodoContent = document.createElement('div');
@@ -163,13 +161,13 @@ class ReprolabSidebarWidget extends Widget {
     // Demo button handler
     const demoBtn = this.node.querySelector('#reprolab-demo-btn');
     if (demoBtn) {
-      demoBtn.addEventListener('click', () => this.handleDemoButton());
+      demoBtn.addEventListener('click', () => this.demoSection.handleDemoButton());
     }
 
     // Save button handler
     const saveBtn = this.node.querySelector('#reprolab-archive-save');
     if (saveBtn) {
-      saveBtn.addEventListener('click', () => this.handleSaveButton());
+      saveBtn.addEventListener('click', () => this.archiveSection.handleSaveButton(this.node));
     }
 
     // Checkbox handlers
@@ -180,13 +178,13 @@ class ReprolabSidebarWidget extends Widget {
     // Metrics button handler
     const metricsBtn = this.node.querySelector('#reprolab-add-metrics');
     if (metricsBtn) {
-      metricsBtn.addEventListener('click', () => this.handleMetricsButton());
+      metricsBtn.addEventListener('click', () => this.metricsSection.handleMetricsButton());
     }
 
     // Dependencies button handler
     const depsBtn = this.node.querySelector('#reprolab-gather-deps');
     if (depsBtn) {
-      depsBtn.addEventListener('click', () => this.handleDependenciesButton());
+      depsBtn.addEventListener('click', () => this.dependenciesSection.handleDependenciesButton());
     }
 
     // Zenodo button handler
@@ -224,135 +222,6 @@ class ReprolabSidebarWidget extends Widget {
     const createExperimentBtn = this.node.querySelector('#reprolab-create-experiment');
     if (createExperimentBtn) {
       createExperimentBtn.addEventListener('click', () => this.handleCreateExperiment());
-    }
-  }
-
-  private handleDemoButton() {
-    if (this.notebooks && this.notebooks.currentWidget) {
-      const notebook = this.notebooks.currentWidget.content;
-      if (notebook.model && notebook.model.cells.length > 0) {
-        notebook.activeCellIndex = 0;
-      } else {
-        this.app.commands.execute('notebook:insert-cell-below');
-        notebook.activeCellIndex = 0;
-      }
-      this.app.commands.execute('notebook:insert-cell-above');
-      if (notebook.model && notebook.model.cells.length > 0) {
-        const cell = notebook.model.cells.get(0);
-        if (cell) {
-          cell.sharedModel.setSource('# test');
-        }
-      }
-    }
-  }
-
-  private handleSaveButton() {
-    const accessKey = (this.node.querySelector('#reprolab-archive-input1') as HTMLInputElement)?.value || '';
-    const secretKey = (this.node.querySelector('#reprolab-archive-input2') as HTMLInputElement)?.value || '';
-    const endpointUrl = (this.node.querySelector('#reprolab-archive-input3') as HTMLInputElement)?.value || '';
-    console.log('[ReproLab Archive Save]', { accessKey, secretKey, endpointUrl });
-  }
-
-  private handleMetricsButton() {
-    if (this.notebooks && this.notebooks.currentWidget) {
-      const notebook = this.notebooks.currentWidget.content;
-      if (notebook.model && notebook.model.cells.length > 0) {
-        for (let i = 0; i < notebook.model.cells.length; i++) {
-          const cell = notebook.model.cells.get(i);
-          if (cell) {
-            const currentContent = cell.sharedModel.source;
-            cell.sharedModel.setSource(`#start\n${currentContent}\n#end`);
-          }
-        }
-        console.log('[ReproLab] Added run metrics to all cells');
-      }
-    }
-  }
-
-  private handleDependenciesButton() {
-    if (this.notebooks && this.notebooks.currentWidget) {
-      const notebook = this.notebooks.currentWidget.content;
-      if (notebook.model && notebook.model.cells.length > 0) {
-        console.log('[ReproLab] Gathering dependencies...');
-        const pipCommands = new Set<string>();
-        
-        for (let i = 0; i < notebook.model.cells.length; i++) {
-          const cell = notebook.model.cells.get(i);
-          if (cell.type === 'code') {
-            const source = cell.sharedModel.getSource();
-            const matches = source.match(/!pip install ([^\n]+)/g);
-            if (matches) {
-              matches.forEach((match: string) => {
-                const packages = match.replace('!pip install', '').trim().split(/\s+/);
-                packages.forEach((pkg: string) => pipCommands.add(pkg.trim()));
-              });
-              const cleanedSource = source.replace(/!pip install [^\n]+\n?/g, '').trim();
-              cell.sharedModel.setSource(cleanedSource);
-            }
-          }
-        }
-
-        const packages = Array.from(pipCommands).sort();
-        if (packages.length > 0) {
-          this.createEnvironmentYaml(packages);
-        }
-      }
-    }
-  }
-
-  private async createEnvironmentYaml(packages: string[]) {
-    const envYaml = `name: reprolab-env
-channels:
-  - conda-forge
-  - defaults
-dependencies:
-  - python=3.11
-  - pip:
-${packages.map(pkg => `    - ${pkg}`).join('\n')}`;
-
-    const xsrfToken = getXsrfToken();
-    try {
-      const response = await fetch('/api/contents/environment.yaml', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(xsrfToken ? { 'X-XSRFToken': xsrfToken } : {})
-        },
-        body: JSON.stringify({
-          type: 'file',
-          format: 'text',
-          content: envYaml
-        })
-      });
-
-      if (response.ok) {
-        console.log('[ReproLab] Created environment.yaml');
-        this.addEnvironmentCell();
-      } else {
-        console.error('[ReproLab] Failed to create environment.yaml');
-      }
-    } catch (error) {
-      console.error('[ReproLab] Error creating environment.yaml:', error);
-    }
-  }
-
-  private addEnvironmentCell() {
-    if (this.notebooks && this.notebooks.currentWidget) {
-      const notebook = this.notebooks.currentWidget.content;
-      if (notebook.model && notebook.model.cells.length > 0) {
-        notebook.activeCellIndex = 0;
-      } else {
-        this.app.commands.execute('notebook:insert-cell-below');
-        notebook.activeCellIndex = 0;
-      }
-      this.app.commands.execute('notebook:insert-cell-above');
-      if (notebook.model && notebook.model.cells.length > 0) {
-        const cell = notebook.model.cells.get(0);
-        if (cell) {
-          cell.sharedModel.setSource(`# Install dependencies from environment.yaml
-!conda env update -f environment.yaml --prune`);
-        }
-      }
     }
   }
 
