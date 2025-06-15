@@ -207,6 +207,76 @@ class ReprolabSidebarWidget extends Widget {
     `;
     this.node.appendChild(depsSection);
 
+    // Add Zenodo section
+    const zenodoSection = document.createElement('div');
+    zenodoSection.className = 'reprolab-section';
+    zenodoSection.innerHTML = `
+      <h3>Publishing software and data to Zenodo</h3>
+      <p>You can in a few steps download the raw datasets and save the snapshots of software to the Zenodo for archiving</p>
+      <button id="reprolab-zenodo-more" class="reprolab-button">See more</button>
+    `;
+    this.node.appendChild(zenodoSection);
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'reprolab-modal';
+    modal.style.display = 'none';
+    modal.style.position = 'fixed';
+    modal.style.zIndex = '1000';
+    modal.style.left = '0';
+    modal.style.top = '0';
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.backgroundColor = 'rgba(0,0,0,0.4)';
+    modal.style.display = 'none';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+
+    const modalContent = document.createElement('div');
+    modalContent.style.backgroundColor = '#fefefe';
+    modalContent.style.margin = '15% auto';
+    modalContent.style.padding = '20px';
+    modalContent.style.border = '1px solid #888';
+    modalContent.style.width = '80%';
+    modalContent.style.maxWidth = '500px';
+    modalContent.style.borderRadius = '5px';
+    modalContent.style.position = 'relative';
+
+    modalContent.innerHTML = `
+      <span class="reprolab-close" style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+      <button id="reprolab-modal-test" class="reprolab-button" style="margin-top: 20px;">Test</button>
+    `;
+
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+
+    // Add event listener for the Zenodo "See more" button
+    const zenodoBtn = this.node.querySelector('#reprolab-zenodo-more') as HTMLButtonElement;
+    zenodoBtn.setAttribute('style', (zenodoBtn.getAttribute('style') || '') + 'cursor:pointer;');
+    zenodoBtn.addEventListener('click', () => {
+      modal.style.display = 'flex';
+    });
+
+    // Add event listener for the modal close button
+    const closeBtn = modal.querySelector('.reprolab-close') as HTMLElement;
+    closeBtn.addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+
+    // Add event listener for the modal test button
+    const modalTestBtn = modal.querySelector('#reprolab-modal-test') as HTMLButtonElement;
+    modalTestBtn.addEventListener('click', () => {
+      console.log('test from the modal');
+    });
+
+    // Close modal when clicking outside
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+
     // Add event listener for the dependencies button
     const depsBtn = this.node.querySelector('#reprolab-gather-deps') as HTMLButtonElement;
     depsBtn.setAttribute('style', (depsBtn.getAttribute('style') || '') + 'cursor:pointer;');
