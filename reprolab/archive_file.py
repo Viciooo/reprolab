@@ -44,6 +44,7 @@ TYPE_NAME_MAPPING = {v: k for k, v in TYPE_MAPPING.items()}
 def _get_function_hash(func: Callable, args: tuple, kwargs: dict) -> str:
     """
     Calculate a unique hash for a function call based on its code and arguments.
+    The hash is based on the function's body and arguments, excluding decorators.
     
     Args:
         func: The function to hash
@@ -51,10 +52,20 @@ def _get_function_hash(func: Callable, args: tuple, kwargs: dict) -> str:
         kwargs: Keyword arguments
     
     Returns:
-        str: MD5 hash of the function and its arguments
+        str: MD5 hash of the function body and its arguments
     """
     # Get function source code
     source = inspect.getsource(func)
+    
+    # Remove decorators from source code
+    lines = source.split('\n')
+    # Skip decorator lines (lines starting with @)
+    body_lines = [line for line in lines if not line.strip().startswith('@')]
+    # Skip empty lines at the start
+    while body_lines and not body_lines[0].strip():
+        body_lines.pop(0)
+    # Reconstruct source without decorators
+    source = '\n'.join(body_lines)
     
     # Convert args and kwargs to a stable string representation
     args_str = str(args)
@@ -64,33 +75,70 @@ def _get_function_hash(func: Callable, args: tuple, kwargs: dict) -> str:
     hash_input = f"{source}{args_str}{kwargs_str}"
     return hashlib.md5(hash_input.encode()).hexdigest()
 
-def persistio(func: Callable) -> Callable:
+def persistio(only_local: bool = False) -> Callable:
     """
     Decorator that caches function results using save_compact and read_compact.
     The cache is based on a hash of the function's source code and its arguments.
+    If only_local is False, it will also try to load/save from cloud storage.
     
     Args:
-        func: The function to cache
+        only_local: If True, only use local storage. If False, also use cloud storage.
     
     Returns:
         Callable: Decorated function that caches its results
     """
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        # Calculate hash for this function call
-        name_hash = _get_function_hash(func, args, kwargs)
-        print(f"\n[persistio] Function: {func.__name__}")
-        print(f"[persistio] Hash: {name_hash}")
-        
-        try:
-            # Try to read from cache first
-            print("[persistio] Attempting to load from cache...")
-            result = read_compact(name_hash)
-            print("[persistio] Successfully loaded from cache!")
-            return result
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Calculate hash for this function call
+            name_hash = _get_function_hash(func, args, kwargs)
+            print(f"\n[persistio] Function: {func.__name__}")
+            print(f"[persistio] Hash: {name_hash}")
             
-        except ValueError:
-            # If not in cache, execute function
+            # Try to read from local cache first
+            try:
+                print("[persistio] Attempting to load from local cache...")
+                result = read_compact(name_hash)
+                print("[persistio] Successfully loaded from local cache!")
+                return result
+            except ValueError:
+                print("[persistio] Local cache miss")
+            
+            # If local cache fails and cloud is enabled, try cloud
+            if not only_local:
+                try:
+                    print("[persistio] Attempting to load from cloud...")
+                    # Get AWS credentials
+                    aws_env = get_aws_env()
+                    
+                    # Initialize S3 client
+                    s3_client = boto3.client(
+                        's3',
+                        aws_access_key_id=aws_env['AWS_ACCESS_KEY_ID'],
+                        aws_secret_access_key=aws_env['AWS_SECRET_ACCESS_KEY']
+                    )
+                    
+                    # List objects in bucket with the hash prefix
+                    response = s3_client.list_objects_v2(
+                        Bucket=aws_env['AWS_BUCKET'],
+                        Prefix=name_hash
+                    )
+                    
+                    # Check if we found any matching files
+                    if 'Contents' in response:
+                        # Get the first matching file
+                        cloud_file = response['Contents'][0]['Key']
+                        print(f"[persistio] Found file in cloud: {cloud_file}")
+                        download_from_cloud(cloud_file)
+                        result = read_compact(name_hash)
+                        print("[persistio] Successfully loaded from cloud!")
+                        return result
+                    else:
+                        print("[persistio] No matching file found in cloud")
+                except Exception as e:
+                    print(f"[persistio] Cloud load failed: {str(e)}")
+            
+            # If both local and cloud attempts fail, execute function
             print("[persistio] Cache miss - executing function...")
             result = func(*args, **kwargs)
             
@@ -98,13 +146,25 @@ def persistio(func: Callable) -> Callable:
             if isinstance(result, tuple(TYPE_MAPPING.values())):
                 print(f"[persistio] Saving result of type {type(result).__name__} to cache...")
                 save_compact(result, name_hash)
-                print("[persistio] Successfully saved to cache!")
+                print("[persistio] Successfully saved to local cache!")
+                
+                if not only_local:
+                    try:
+                        # Find the file that was just saved
+                        matching_files = [f for f in os.listdir(REPROLAB_DATA_DIR) if f.startswith(name_hash + '.')]
+                        if matching_files:
+                            cloud_file = matching_files[0]
+                            upload_to_cloud(cloud_file)
+                            print("[persistio] Successfully saved to cloud!")
+                    except Exception as e:
+                        print(f"[persistio] Cloud save failed: {str(e)}")
             else:
                 print(f"[persistio] Result type {type(result).__name__} not supported for caching")
             
             return result
-    
-    return wrapper
+        
+        return wrapper
+    return decorator
 
 def _get_extension(data_type: Type[SupportedDataTypes]) -> str:
     """
@@ -361,3 +421,4 @@ def download_from_cloud(file_name: str) -> str:
         raise Exception(f"Failed to download file: {str(e)}")
     except Exception as e:
         raise Exception(f"Error during download: {str(e)}")
+
