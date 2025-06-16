@@ -13,7 +13,7 @@ export class DemoSection {
 
   render(): string {
     const demoContent = document.createElement('div');
-    demoContent.innerHTML = '<p>Press the button below to add a demo cell to the top of the active notebook. The cell will explain how to use the ReproLab extension.</p>';
+    demoContent.innerHTML = '<p>Press the button below to add a demo cell to the top of the active notebook. The cell will explain how to use the ReproLab python package.</p>';
     demoContent.appendChild(createButton('reprolab-demo-btn', 'Add Demo Cell'));
     const section = createSection('Demo', demoContent.innerHTML);
     return section.outerHTML;

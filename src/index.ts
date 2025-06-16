@@ -93,6 +93,10 @@ class ReprolabSidebarWidget extends Widget {
     const checklistHtml = this.checklistSection.render();
     container.appendChild(document.createRange().createContextualFragment(checklistHtml));
 
+    // Experiment section
+    const experimentHtml = this.experimentSection.render();
+    container.appendChild(document.createRange().createContextualFragment(experimentHtml));
+
     // Archive section
     const archiveHtml = this.archiveSection.render();
     container.appendChild(document.createRange().createContextualFragment(archiveHtml));
@@ -108,10 +112,6 @@ class ReprolabSidebarWidget extends Widget {
     // Zenodo section
     const zenodoHtml = this.zenodoSection.render();
     container.appendChild(document.createRange().createContextualFragment(zenodoHtml));
-
-    // Experiment section
-    const experimentHtml = this.experimentSection.render();
-    container.appendChild(document.createRange().createContextualFragment(experimentHtml));
 
     // Set the container as the widget's content
     this.node.innerHTML = '';
@@ -203,9 +203,9 @@ class ReprolabSidebarWidget extends Widget {
     });
 
     // Create experiment button handler
-    const createExperimentBtn = this.node.querySelector('#reprolab-create-experiment');
-    if (createExperimentBtn) {
-      createExperimentBtn.addEventListener('click', () => this.experimentSection.handleCreateExperiment(this.node));
+    const createExperimentSeeMoreBtn = this.node.querySelector('#reprolab-experiment-see-more');
+    if (createExperimentSeeMoreBtn) {
+      createExperimentSeeMoreBtn.addEventListener('click', () => this.experimentSection.handleCreateExperimentSeeMore(this.node));
     }
   }
 }
