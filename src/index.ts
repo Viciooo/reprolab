@@ -21,8 +21,6 @@ import { createButton } from './utils';
 import { ChecklistSection } from './sections/checklist';
 import { DemoSection } from './sections/demo';
 import { ArchiveSection } from './sections/archive';
-import { MetricsSection } from './sections/metrics';
-import { DependenciesSection } from './sections/dependencies';
 import { ZenodoSection } from './sections/zenodo';
 import { ExperimentSection } from './sections/experiment';
 
@@ -44,8 +42,6 @@ class ReprolabSidebarWidget extends Widget {
   private checklistSection: ChecklistSection;
   private demoSection: DemoSection;
   private archiveSection: ArchiveSection;
-  private metricsSection: MetricsSection;
-  private dependenciesSection: DependenciesSection;
   private zenodoSection: ZenodoSection;
   private experimentSection: ExperimentSection;
   notebooks: INotebookTracker | undefined;
@@ -62,10 +58,8 @@ class ReprolabSidebarWidget extends Widget {
     this.checklistSection = new ChecklistSection();
     this.demoSection = new DemoSection(app, notebooks);
     this.archiveSection = new ArchiveSection();
-    this.metricsSection = new MetricsSection(notebooks);
-    this.dependenciesSection = new DependenciesSection(app, notebooks);
     this.zenodoSection = new ZenodoSection();
-    this.experimentSection = new ExperimentSection();
+    this.experimentSection = new ExperimentSection(app, notebooks);
     this.notebooks = notebooks;
     this.app = app;
     this.render();
@@ -100,14 +94,6 @@ class ReprolabSidebarWidget extends Widget {
     // Archive section
     const archiveHtml = this.archiveSection.render();
     container.appendChild(document.createRange().createContextualFragment(archiveHtml));
-
-    // Run Metrics section
-    const metricsHtml = this.metricsSection.render();
-    container.appendChild(document.createRange().createContextualFragment(metricsHtml));
-
-    // Dependencies section
-    const depsHtml = this.dependenciesSection.render();
-    container.appendChild(document.createRange().createContextualFragment(depsHtml));
 
     // Zenodo section
     const zenodoHtml = this.zenodoSection.render();
@@ -160,18 +146,6 @@ class ReprolabSidebarWidget extends Widget {
     this.node.querySelectorAll('input[type="checkbox"]').forEach(cb => {
       cb.addEventListener('change', (event: Event) => this.checklistSection.handleCheckboxChange(event));
     });
-
-    // Metrics button handler
-    const metricsBtn = this.node.querySelector('#reprolab-add-metrics');
-    if (metricsBtn) {
-      metricsBtn.addEventListener('click', () => this.metricsSection.handleMetricsButton());
-    }
-
-    // Dependencies button handler
-    const depsBtn = this.node.querySelector('#reprolab-gather-deps');
-    if (depsBtn) {
-      depsBtn.addEventListener('click', () => this.dependenciesSection.handleDependenciesButton());
-    }
 
     // Zenodo button handler
     const zenodoBtn = this.node.querySelector('#reprolab-zenodo-more');
