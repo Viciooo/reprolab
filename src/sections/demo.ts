@@ -13,7 +13,7 @@ export class DemoSection {
 
   render(): string {
     const demoContent = document.createElement('div');
-    demoContent.innerHTML = '<p>Press the button below to add a demo cell to the top of the active notebook. The cell will explain how to use the ReproLab python package.</p>';
+    demoContent.innerHTML = '<p>Press the button below to add a demo cell to the top of the active notebook. The cell will display the ReproLab documentation.</p>';
     demoContent.appendChild(createButton('reprolab-demo-btn', 'Add Demo Cell'));
     const section = createSection('Demo', demoContent.innerHTML);
     return section.outerHTML;
@@ -32,7 +32,16 @@ export class DemoSection {
       if (notebook.model && notebook.model.cells.length > 0) {
         const cell = notebook.model.cells.get(0);
         if (cell) {
-          cell.sharedModel.setSource('# test');
+          cell.sharedModel.setSource(`# Read and display the ReproLab documentation
+from IPython.display import Markdown
+import os
+
+# Read the markdown file
+with open('reprolab_data/demo.md', 'r') as f:
+    content = f.read()
+
+# Display the markdown content
+Markdown(content)`);
         }
       }
     }
