@@ -59,6 +59,7 @@ def get_current_notebook_name():
 def add_notebooks() -> bool:
     """
     Add the current Jupyter notebook file to git staging area.
+    Handles both tracked and untracked files.
     
     Returns:
         bool: True if successful, False otherwise
@@ -68,8 +69,25 @@ def add_notebooks() -> bool:
         if not notebook_name:
             return False
         
+        # Check if the file is untracked
+        status_result = subprocess.run(['git', 'status', '--porcelain'], 
+                                     check=True, capture_output=True, text=True)
+        
+        is_untracked = False
+        for line in status_result.stdout.split('\n'):
+            if line.strip() and line.endswith(notebook_name):
+                status = line[:2].strip()
+                if status == '??':  # Untracked file
+                    is_untracked = True
+                    break
+        
+        # Add the notebook to staging
         subprocess.run(['git', 'add', notebook_name], 
                       check=True, capture_output=True, text=True)
+        
+        if is_untracked:
+            print(f"Started tracking notebook: {notebook_name}")
+        
         return True
     except subprocess.CalledProcessError as e:
         print(f"Error adding current notebook: {e}")

@@ -52,19 +52,6 @@ export class ExperimentSection {
     const inputContainer = document.createElement('div');
     inputContainer.className = 'reprolab-experiment-input';
 
-    // Create label
-    const label = document.createElement('label');
-    label.className = 'reprolab-experiment-label';
-    label.textContent = 'Suggested tag:';
-    label.htmlFor = 'reprolab-experiment-tag';
-
-    // Create input
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.id = 'reprolab-experiment-tag';
-    input.className = 'reprolab-input';
-    input.value = 'v1.0.0';
-
     // Create options container
     const optionsContainer = document.createElement('div');
     optionsContainer.className = 'reprolab-experiment-options';
@@ -95,28 +82,26 @@ export class ExperimentSection {
     createButton.className = 'reprolab-button';
     createButton.textContent = 'Create experiment';
     createButton.addEventListener('click', () => {
-      const tagInput = document.querySelector('#reprolab-experiment-tag') as HTMLInputElement;
       const metricsCheckbox = document.querySelector('#reprolab-metrics-checkbox') as HTMLInputElement;
       const depsCheckbox = document.querySelector('#reprolab-deps-checkbox') as HTMLInputElement;
 
-      if (tagInput) {
-        console.log(`[ReproLab] Creating experiment with tag: ${tagInput.value}`);
-        
-        // Handle metrics if checked
-        if (metricsCheckbox && metricsCheckbox.checked) {
-          this.handleMetrics();
-        }
-
-        // Handle dependencies if checked
-        if (depsCheckbox && depsCheckbox.checked) {
-          this.handleDependencies();
-        }
+      console.log('[ReproLab] Creating experiment...');
+      
+      // Handle metrics if checked
+      if (metricsCheckbox && metricsCheckbox.checked) {
+        this.handleMetrics();
       }
+
+      // Handle dependencies if checked
+      if (depsCheckbox && depsCheckbox.checked) {
+        this.handleDependencies();
+      }
+
+      // Create the experiment
+      this.createExperiment();
     });
 
     // Assemble the modal
-    inputContainer.appendChild(label);
-    inputContainer.appendChild(input);
     inputContainer.appendChild(optionsContainer);
     inputContainer.appendChild(createButton);
 
@@ -132,6 +117,79 @@ export class ExperimentSection {
         this.modal.style.display = 'none';
       }
     });
+  }
+
+  private async createExperiment(): Promise<void> {
+    if (!this.notebooks || !this.notebooks.currentWidget) {
+      console.error('[ReproLab] No active notebook found');
+      return;
+    }
+
+    const notebook = this.notebooks.currentWidget.content;
+    if (!notebook.model) {
+      console.error('[ReproLab] No notebook model found');
+      return;
+    }
+
+    try {
+      // Save all notebooks first to preserve current state
+      console.log('[ReproLab] Saving notebook before experiment...');
+      await this.app.commands.execute('docmanager:save-all');
+      
+      // Wait a moment for save to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Save current state
+      const originalCellCount = notebook.model.cells.length;
+      console.log(`[ReproLab] Original notebook has ${originalCellCount} cells`);
+
+      // Add start_experiment cell at the top
+      notebook.activeCellIndex = 0;
+      this.app.commands.execute('notebook:insert-cell-above');
+      
+      // Wait a moment for the cell to be created
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const startCell = notebook.model.cells.get(0);
+      if (startCell) {
+        startCell.sharedModel.setSource(
+          `from reprolab import start_experiment, end_experiment
+start_experiment()`
+        );
+        console.log('[ReproLab] Added start_experiment cell');
+      }
+
+      // Add end_experiment cell at the bottom
+      notebook.activeCellIndex = notebook.model.cells.length - 1;
+      this.app.commands.execute('notebook:insert-cell-below');
+      
+      // Wait a moment for the cell to be created
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const endCell = notebook.model.cells.get(notebook.model.cells.length - 1);
+      if (endCell) {
+        endCell.sharedModel.setSource('end_experiment()');
+        console.log('[ReproLab] Added end_experiment cell');
+      }
+
+      console.log(`[ReproLab] Notebook now has ${notebook.model.cells.length} cells`);
+
+      // Run all cells
+      console.log('[ReproLab] Running all cells...');
+      await this.app.commands.execute('notebook:run-all-cells');
+
+      // Wait a bit for execution to complete
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      console.log('[ReproLab] Experiment completed successfully');
+
+      // Close the modal
+      if (this.modal) {
+        this.modal.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('[ReproLab] Error creating experiment:', error);
+    }
   }
 
   private handleMetrics(): void {
