@@ -13,13 +13,14 @@ export class DemoSection {
 
   render(): string {
     const demoContent = document.createElement('div');
-    demoContent.innerHTML = '<p>Press the button below to add a demo cell to the top of the active notebook. The cell will display the ReproLab documentation.</p>';
+    demoContent.innerHTML =
+      '<p>Press the button below to add a demo cell to the top of the active notebook. The cell will display the ReproLab documentation.</p>';
     demoContent.appendChild(createButton('reprolab-demo-btn', 'Add Demo Cell'));
     const section = createSection('Demo', demoContent.innerHTML);
     return section.outerHTML;
   }
 
-  handleDemoButton() {
+  async handleDemoButton() {
     if (this.notebooks && this.notebooks.currentWidget) {
       const notebook = this.notebooks.currentWidget.content;
       if (notebook.model && notebook.model.cells.length > 0) {
@@ -32,16 +33,20 @@ export class DemoSection {
       if (notebook.model && notebook.model.cells.length > 0) {
         const cell = notebook.model.cells.get(0);
         if (cell) {
-          cell.sharedModel.setSource(`# Read and display the ReproLab documentation
-from IPython.display import Markdown
-import os
+          try {
+            // Read the demo.md file using JupyterLab's file system API
+            const contents = this.app.serviceManager.contents;
+            const model = await contents.get('reprolab_data/demo.md');
+            const markdownContent = model.content as string;
 
-# Read the markdown file
-with open('reprolab_data/demo.md', 'r') as f:
-    content = f.read()
-
-# Display the markdown content
-Markdown(content)`);
+            cell.sharedModel.setSource(markdownContent);
+            // Change cell type to markdown
+            this.app.commands.execute('notebook:change-cell-to-markdown');
+            // Render all markdown cells to ensure proper display
+            this.app.commands.execute('notebook:render-all-markdown');
+          } catch (error) {
+            console.error('Error reading demo.md file:', error);
+          }
         }
       }
     }

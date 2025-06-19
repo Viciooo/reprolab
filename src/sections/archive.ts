@@ -1,4 +1,4 @@
-import { createSection } from '../utils';
+import { createSection, getXsrfToken } from '../utils';
 
 // Use a relative path to ensure it's created in the current workspace
 const AWS_ENV_FILE = 'reprolab_data/aws_env.json';
@@ -106,7 +106,7 @@ export class ArchiveSection {
   private async saveAWSEnv() {
     console.log('[ReproLab Archive] Saving AWS environment...');
     try {
-      const xsrfToken = document.cookie.split('; ').find(row => row.startsWith('_xsrf='))?.split('=')[1];
+      const xsrfToken = getXsrfToken();
       const response = await fetch(`/api/contents/${AWS_ENV_FILE}`, {
         method: 'PUT',
         headers: {

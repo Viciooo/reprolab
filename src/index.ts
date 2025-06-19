@@ -23,6 +23,29 @@ import { DemoSection } from './sections/demo';
 import { ArchiveSection } from './sections/archive';
 import { ZenodoSection } from './sections/zenodo';
 import { ExperimentSection } from './sections/experiment';
+import { EnvironmentSection } from './sections/environment';
+
+// Constants
+const REPROLAB_CONFIG = {
+  ID: 'reprolab-sidebar',
+  TITLE: 'ReproLab',
+  CAPTION: 'ReproLab Panel',
+  COMMAND: 'reprolab:open',
+  COMMAND_LABEL: 'Open ReproLab Panel',
+  COMMAND_CATEGORY: 'ReproLab'
+} as const;
+
+const BUTTON_IDS = {
+  DEMO: 'reprolab-demo-btn',
+  ARCHIVE_SAVE: 'reprolab-archive-save',
+  ZENODO_MORE: 'reprolab-zenodo-more',
+  CREATE_EXPERIMENT: 'reprolab-create-experiment-btn',
+  CREATE_ENVIRONMENT: 'reprolab-create-environment-btn',
+  FREEZE_DEPS: 'reprolab-freeze-deps-btn',
+  MODAL_TEST: 'reprolab-modal-test'
+} as const;
+
+const CHECKBOX_SELECTOR = 'input[type="checkbox"]';
 
 /** SVG string for the ReproLab icon */
 const REPROLAB_ICON_SVG = `
@@ -39,73 +62,99 @@ const reprolabIcon = new LabIcon({
 
 /** The sidebar widget for the ReproLab panel */
 class ReprolabSidebarWidget extends Widget {
-  private checklistSection: ChecklistSection;
-  private demoSection: DemoSection;
-  private archiveSection: ArchiveSection;
-  private zenodoSection: ZenodoSection;
-  private experimentSection: ExperimentSection;
-  notebooks: INotebookTracker | undefined;
-  app: JupyterFrontEnd;
+  private checklistSection!: ChecklistSection;
+  private demoSection!: DemoSection;
+  private archiveSection!: ArchiveSection;
+  private zenodoSection!: ZenodoSection;
+  private experimentSection!: ExperimentSection;
+  private environmentSection!: EnvironmentSection;
+  private readonly notebooks: INotebookTracker | undefined;
+  private readonly app: JupyterFrontEnd;
 
   constructor(app: JupyterFrontEnd, notebooks?: INotebookTracker) {
     super();
-    this.id = 'reprolab-sidebar';
+    this.app = app;
+    this.notebooks = notebooks;
+    
+    this.initializeWidget();
+    this.initializeSections();
+    this.render();
+    this.loadChecklistState();
+  }
+
+  private initializeWidget(): void {
+    this.id = REPROLAB_CONFIG.ID;
     this.addClass('jp-SideBar');
     this.addClass('reprolab-sidebar');
     this.title.icon = reprolabIcon;
-    this.title.label = 'ReproLab';
-    this.title.caption = 'ReproLab Panel';
-    this.checklistSection = new ChecklistSection();
-    this.demoSection = new DemoSection(app, notebooks);
-    this.archiveSection = new ArchiveSection();
-    this.zenodoSection = new ZenodoSection();
-    this.experimentSection = new ExperimentSection(app, notebooks);
-    this.notebooks = notebooks;
-    this.app = app;
-    this.render();
-    this.checklistSection.loadChecklistState().then(() => this.render());
+    this.title.label = REPROLAB_CONFIG.TITLE;
+    this.title.caption = REPROLAB_CONFIG.CAPTION;
   }
 
-  render() {
-    // Create main container
+  private initializeSections(): void {
+    this.checklistSection = new ChecklistSection();
+    this.demoSection = new DemoSection(this.app, this.notebooks);
+    this.archiveSection = new ArchiveSection();
+    this.zenodoSection = new ZenodoSection();
+    this.experimentSection = new ExperimentSection(this.app, this.notebooks);
+    this.environmentSection = new EnvironmentSection(this.app, this.notebooks);
+  }
+
+  private async loadChecklistState(): Promise<void> {
+    await this.checklistSection.loadChecklistState();
+    this.render();
+  }
+
+  render(): void {
+    const container = this.createMainContainer();
+    const modal = this.createModal();
+    
+    this.node.innerHTML = '';
+    this.node.appendChild(container);
+    document.body.appendChild(modal);
+
+    this.setupEventListeners(modal);
+  }
+
+  private createMainContainer(): HTMLElement {
     const container = document.createElement('div');
     
     // Header section
+    const header = this.createHeader();
+    container.appendChild(header);
+
+    // Sections
+    const sections = [
+      this.demoSection.render(),
+      this.checklistSection.render(),
+      this.experimentSection.render(),
+      this.environmentSection.render(),
+      this.archiveSection.render(),
+      this.zenodoSection.render()
+    ];
+
+    sections.forEach(sectionHtml => {
+      const fragment = document.createRange().createContextualFragment(sectionHtml);
+      container.appendChild(fragment);
+    });
+
+    return container;
+  }
+
+  private createHeader(): HTMLElement {
     const header = document.createElement('div');
     header.className = 'reprolab-header';
     header.innerHTML = `
       <h1>ReproLab</h1>
       <h3>One step closer to accessible reproducible research</h3>
     `;
-    container.appendChild(header);
+    return header;
+  }
 
-    // Demo section
-    const demoHtml = this.demoSection.render();
-    container.appendChild(document.createRange().createContextualFragment(demoHtml));
-
-    // Checklist section
-    const checklistHtml = this.checklistSection.render();
-    container.appendChild(document.createRange().createContextualFragment(checklistHtml));
-
-    // Experiment section
-    const experimentHtml = this.experimentSection.render();
-    container.appendChild(document.createRange().createContextualFragment(experimentHtml));
-
-    // Archive section
-    const archiveHtml = this.archiveSection.render();
-    container.appendChild(document.createRange().createContextualFragment(archiveHtml));
-
-    // Zenodo section
-    const zenodoHtml = this.zenodoSection.render();
-    container.appendChild(document.createRange().createContextualFragment(zenodoHtml));
-
-    // Set the container as the widget's content
-    this.node.innerHTML = '';
-    this.node.appendChild(container);
-
-    // Create modal
+  private createModal(): HTMLElement {
     const modal = document.createElement('div');
     modal.className = 'reprolab-modal';
+    
     const modalContent = document.createElement('div');
     modalContent.className = 'reprolab-modal-content';
     
@@ -116,44 +165,75 @@ class ReprolabSidebarWidget extends Widget {
     const modalText = document.createElement('p');
     modalText.textContent = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.';
     
-    const testButton = createButton('reprolab-modal-test', 'Test');
+    const testButton = createButton(BUTTON_IDS.MODAL_TEST, 'Test');
     
     modalContent.appendChild(closeButton);
     modalContent.appendChild(modalText);
     modalContent.appendChild(testButton);
     
     modal.appendChild(modalContent);
-    document.body.appendChild(modal);
-
-    // Add event listeners
-    this.setupEventListeners(modal);
+    return modal;
   }
 
-  private setupEventListeners(modal: HTMLElement) {
-    // Demo button handler
-    const demoBtn = this.node.querySelector('#reprolab-demo-btn');
+  private setupEventListeners(modal: HTMLElement): void {
+    this.setupButtonListeners();
+    this.setupCheckboxListeners();
+    this.setupModalListeners(modal);
+  }
+
+  private setupButtonListeners(): void {
+    // Demo button
+    const demoBtn = this.node.querySelector(`#${BUTTON_IDS.DEMO}`);
     if (demoBtn) {
       demoBtn.addEventListener('click', () => this.demoSection.handleDemoButton());
     }
 
-    // Save button handler
-    const saveBtn = this.node.querySelector('#reprolab-archive-save');
+    // Archive save button
+    const saveBtn = this.node.querySelector(`#${BUTTON_IDS.ARCHIVE_SAVE}`);
     if (saveBtn) {
       saveBtn.addEventListener('click', () => this.archiveSection.handleSaveButton(this.node));
     }
 
-    // Checkbox handlers
-    this.node.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.addEventListener('change', (event: Event) => this.checklistSection.handleCheckboxChange(event));
-    });
-
-    // Zenodo button handler
-    const zenodoBtn = this.node.querySelector('#reprolab-zenodo-more');
+    // Zenodo button
+    const zenodoBtn = this.node.querySelector(`#${BUTTON_IDS.ZENODO_MORE}`);
     if (zenodoBtn) {
-      zenodoBtn.addEventListener('click', () => this.zenodoSection.handleZenodoButton(modal));
+      zenodoBtn.addEventListener('click', () => {
+        const modal = document.querySelector('.reprolab-modal') as HTMLElement;
+        if (modal) {
+          this.zenodoSection.handleZenodoButton(modal);
+        }
+      });
     }
 
-    // Modal close button handler
+    // Create experiment button
+    const createExperimentBtn = this.node.querySelector(`#${BUTTON_IDS.CREATE_EXPERIMENT}`);
+    if (createExperimentBtn) {
+      createExperimentBtn.addEventListener('click', () => this.handleCreateExperiment());
+    }
+
+    // Create environment button
+    const createEnvironmentBtn = this.node.querySelector(`#${BUTTON_IDS.CREATE_ENVIRONMENT}`);
+    if (createEnvironmentBtn) {
+      createEnvironmentBtn.addEventListener('click', () => this.handleCreateEnvironment());
+    }
+
+    // Freeze dependencies button
+    const freezeDepsBtn = this.node.querySelector(`#${BUTTON_IDS.FREEZE_DEPS}`);
+    if (freezeDepsBtn) {
+      freezeDepsBtn.addEventListener('click', () => this.handleFreezeDependencies());
+    }
+  }
+
+  private setupCheckboxListeners(): void {
+    this.node.querySelectorAll(CHECKBOX_SELECTOR).forEach(cb => {
+      cb.addEventListener('change', (event: Event) => 
+        this.checklistSection.handleCheckboxChange(event)
+      );
+    });
+  }
+
+  private setupModalListeners(modal: HTMLElement): void {
+    // Modal close button
     const closeBtn = modal.querySelector('.reprolab-modal-close');
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
@@ -161,8 +241,8 @@ class ReprolabSidebarWidget extends Widget {
       });
     }
 
-    // Modal test button handler
-    const modalTestBtn = modal.querySelector('#reprolab-modal-test');
+    // Modal test button
+    const modalTestBtn = modal.querySelector(`#${BUTTON_IDS.MODAL_TEST}`);
     if (modalTestBtn) {
       modalTestBtn.addEventListener('click', () => {
         console.log('test from the modal');
@@ -175,12 +255,27 @@ class ReprolabSidebarWidget extends Widget {
         modal.style.display = 'none';
       }
     });
+  }
 
-    // Create experiment button handler
-    const createExperimentSeeMoreBtn = this.node.querySelector('#reprolab-experiment-see-more');
-    if (createExperimentSeeMoreBtn) {
-      createExperimentSeeMoreBtn.addEventListener('click', () => this.experimentSection.handleCreateExperimentSeeMore(this.node));
-    }
+  private handleCreateExperiment(): void {
+    console.log('[ReproLab] Creating experiment...');
+    
+    // Create the experiment
+    this.experimentSection.createExperiment();
+  }
+
+  private handleCreateEnvironment(): void {
+    console.log('[ReproLab] Creating environment...');
+    
+    // Create the environment
+    this.environmentSection.createEnvironment();
+  }
+
+  private handleFreezeDependencies(): void {
+    console.log('[ReproLab] Freezing dependencies...');
+    
+    // Add dependency freeze cell
+    this.environmentSection.addFreezeDepsCell();
   }
 }
 
@@ -193,16 +288,19 @@ function activateReprolab(
   console.log('JupyterLab extension reprolab is activated!');
 
   // Add command to open the sidebar panel
-  app.commands.addCommand('reprolab:open', {
-    label: 'Open ReproLab Panel',
+  app.commands.addCommand(REPROLAB_CONFIG.COMMAND, {
+    label: REPROLAB_CONFIG.COMMAND_LABEL,
     icon: reprolabIcon,
     execute: () => {
-      app.shell.activateById('reprolab-sidebar');
+      app.shell.activateById(REPROLAB_CONFIG.ID);
     }
   });
 
   // Add the command to the command palette
-  palette.addItem({ command: 'reprolab:open', category: 'ReproLab' });
+  palette.addItem({ 
+    command: REPROLAB_CONFIG.COMMAND, 
+    category: REPROLAB_CONFIG.COMMAND_CATEGORY 
+  });
 
   // Add the sidebar widget (only once)
   const sidebarWidget = new ReprolabSidebarWidget(app, notebooks);

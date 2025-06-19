@@ -1,4 +1,4 @@
-import { createSection } from '../utils';
+import { createSection, getXsrfToken } from '../utils';
 
 const CHECKLIST_FILE = 'reprolab_data/reproducibility_checklist.json';
 const DEFAULT_CHECKLIST = [
@@ -76,7 +76,7 @@ export class ChecklistSection {
 
   async saveChecklistState() {
     try {
-      const xsrfToken = document.cookie.split('; ').find(row => row.startsWith('_xsrf='))?.split('=')[1];
+      const xsrfToken = getXsrfToken();
       await fetch(`/api/contents/${CHECKLIST_FILE}`, {
         method: 'PUT',
         headers: {
