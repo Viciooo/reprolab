@@ -126,7 +126,7 @@ import sys
 
 def create_new_venv(venv_name: str):
     # Define the virtual environment name and path
-    essential_packages = ["ipykernel","boto3", "ipylab", "pandas","numpy","xarray","requests","pyarrow"]
+    essential_packages = ["ipykernel","boto3", "ipylab", "pandas","numpy","xarray","requests","pyarrow", "nbformat"]
 
     venv_path = os.path.join(os.getcwd(), venv_name)
     bin_dir = "Scripts" if os.name == "nt" else "bin"
