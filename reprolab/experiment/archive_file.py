@@ -535,7 +535,7 @@ def download_notebook_cache_package(notebook_name: str, output_zip_path: str = N
     Download all cached data for a given notebook and package it with metadata into a zip file.
     
     Args:
-        notebook_name: Name of the notebook (without .ipynb extension)
+        notebook_name: Name of the notebook (with or without .ipynb extension)
         output_zip_path: Optional path for the output zip file. If None, uses default naming.
     
     Returns:
@@ -550,12 +550,24 @@ def download_notebook_cache_package(notebook_name: str, output_zip_path: str = N
     import shutil
     
     try:
-        # Construct the metadata filename
-        yaml_filename = f"{notebook_name}_persistio_archive.yaml"
+        # Construct the metadata filename - try both with and without .ipynb extension
+        yaml_filename_with_ext = f"{notebook_name}_persistio_archive.yaml"
+        yaml_filename_without_ext = f"{notebook_name.replace('.ipynb', '')}_persistio_archive.yaml"
         
-        # Check if metadata file exists
-        if not os.path.exists(yaml_filename):
-            raise ValueError(f"Metadata file not found: {yaml_filename}")
+        # Check if metadata file exists (try both variations)
+        yaml_filename = None
+        if os.path.exists(yaml_filename_with_ext):
+            yaml_filename = yaml_filename_with_ext
+        elif os.path.exists(yaml_filename_without_ext):
+            yaml_filename = yaml_filename_without_ext
+        else:
+            # Try to find any matching metadata file
+            possible_files = [f for f in os.listdir('.') if f.endswith('_persistio_archive.yaml')]
+            if possible_files:
+                yaml_filename = possible_files[0]
+                print(f"[download_notebook_cache_package] Found metadata file: {yaml_filename}")
+            else:
+                raise ValueError(f"Metadata file not found. Tried: {yaml_filename_with_ext}, {yaml_filename_without_ext}")
         
         # Load metadata
         with open(yaml_filename, 'r') as f:
@@ -570,6 +582,7 @@ def download_notebook_cache_package(notebook_name: str, output_zip_path: str = N
             output_zip_path = f"{notebook_name}_cache_package_{timestamp}.zip"
         
         print(f"[download_notebook_cache_package] Processing notebook: {notebook_name}")
+        print(f"[download_notebook_cache_package] Using metadata file: {yaml_filename}")
         print(f"[download_notebook_cache_package] Found {len(metadata['cells_instrumented'])} cached functions")
         
         # Create temporary directory for organizing files
@@ -739,21 +752,26 @@ def download_reproducability_package(tag_name: str) -> str:
         
         print(f"[download_reproducability_package] Found {len(notebook_files)} notebooks: {notebook_files}")
         
-        # Step 3: Create code package (all notebooks)
+        # Step 3: Create code package (all files in the repository)
         print(f"[download_reproducability_package] 📋 Step 3: Creating code package")
         code_zip_path = f"{tag_name}_code.zip"
         
         with zipfile.ZipFile(code_zip_path, 'w', zipfile.ZIP_DEFLATED) as code_zip:
-            # Add all notebook files
-            for notebook in notebook_files:
-                code_zip.write(notebook, notebook)
-                print(f"[download_reproducability_package] Added to code package: {notebook}")
-            
-            # Add any Python files in the current directory
-            python_files = glob.glob('*.py')
-            for py_file in python_files:
-                code_zip.write(py_file, py_file)
-                print(f"[download_reproducability_package] Added to code package: {py_file}")
+            # Add all files in the current directory and subdirectories
+            for root, dirs, files in os.walk('.'):
+                # Skip certain directories
+                dirs[:] = [d for d in dirs if d not in ['.git', '__pycache__', '.ipynb_checkpoints', 'node_modules', '.reprolab_data']]
+                
+                for file in files:
+                    # Skip certain file types
+                    if file.endswith(('.pyc', '.pyo', '.DS_Store', '.zip', '.tar.gz')):
+                        continue
+                    
+                    file_path = os.path.join(root, file)
+                    # Use relative path for the archive
+                    arc_name = os.path.relpath(file_path, '.')
+                    code_zip.write(file_path, arc_name)
+                    print(f"[download_reproducability_package] Added to code package: {arc_name}")
         
         print(f"[download_reproducability_package] ✅ Code package created: {code_zip_path}")
         
