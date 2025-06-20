@@ -127,8 +127,8 @@ class ReprolabSidebarWidget extends Widget {
     const sections = [
       this.demoSection.render(),
       this.checklistSection.render(),
-      this.experimentSection.render(),
       this.environmentSection.render(),
+      this.experimentSection.render(),
       this.archiveSection.render(),
       this.zenodoSection.render()
     ];
