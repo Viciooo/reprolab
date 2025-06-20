@@ -835,6 +835,14 @@ This package contains all the code and data needed to reproduce the results from
         print(f"   - {len(data_packages)} data packages")
         print(f"   - README with usage instructions")
         
+        # Checkout back to main branch
+        print(f"[download_reproducability_package] 🔄 Checking out to main branch...")
+        try:
+            subprocess.run(['git', 'checkout', 'main'], check=True)
+            print(f"[download_reproducability_package] ✅ Successfully checked out to main branch")
+        except subprocess.CalledProcessError as e:
+            print(f"[download_reproducability_package] ⚠️ Warning: Failed to checkout to main branch: {str(e)}")
+        
         return final_package_path
     
     except Exception as e:
