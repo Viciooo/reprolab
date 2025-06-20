@@ -12,6 +12,12 @@ from botocore.exceptions import ClientError
 from typing import Union, Type, Dict, Callable, Any, Optional
 from functools import wraps
 from pathlib import Path
+import os
+import yaml
+import datetime
+import os
+import glob
+import pprint
 
 # Define supported data types for type hints
 SupportedDataTypes = Union[
@@ -95,6 +101,27 @@ def persistio(only_local: bool = False) -> Callable:
             name_hash = _get_function_hash(func, args, kwargs)
             print(f"\n[persistio] Function: {func.__name__}")
             print(f"[persistio] Hash: {name_hash}")
+            
+            # Log and record metadata for every persistio trigger
+            try:
+                # Get function source code for code_origin
+                code_origin = inspect.getsource(func)
+                # Get bucket name from AWS environment (if available)
+                bucket_name = None
+                if not only_local:
+                    try:
+                        aws_env = get_aws_env()
+                        bucket_name = aws_env['AWS_BUCKET']
+                    except Exception:
+                        bucket_name = "local_only"
+                else:
+                    bucket_name = "local_only"
+                
+                # Persist metadata for the current notebook
+                persist_metadata_for_current_notebook(name_hash, code_origin, bucket_name)
+                print(f"[persistio] Trigger logged for function: {func.__name__}")
+            except Exception as metadata_error:
+                print(f"[persistio] Failed to log trigger metadata: {str(metadata_error)}")
             
             # Try to read from local cache first
             try:
@@ -422,4 +449,423 @@ def download_from_cloud(file_name: str) -> str:
         raise Exception(f"Failed to download file: {str(e)}")
     except Exception as e:
         raise Exception(f"Error during download: {str(e)}")
+
+
+def get_last_changed_notebook():
+    """
+    Returns the name of the most recently modified Jupyter notebook (.ipynb) file 
+    in the current directory.
+    """
+    try:
+        # Find all .ipynb files in the current directory
+        notebook_files = glob.glob('*.ipynb')
+        if not notebook_files:
+            raise RuntimeError("No .ipynb files found in the current directory")
+        
+        # Get the most recently modified notebook
+        latest_notebook = max(notebook_files, key=os.path.getmtime)
+        return latest_notebook
+    except Exception as e:
+        raise RuntimeError(f"Error finding last changed notebook: {str(e)}")
+
+def persist_metadata_for_current_notebook(cell_hash, code_origin, bucket_name):
+    notebook_name = get_last_changed_notebook()
+    
+    try:
+        yaml_filename = f"{notebook_name}_persistio_archive.yaml"
+        now_iso = datetime.datetime.now(datetime.UTC)
+
+        if os.path.exists(yaml_filename):
+            with open(yaml_filename, 'r') as f:
+                metadata = yaml.safe_load(f) or {}
+        else:
+            metadata = {}
+
+        metadata['jupyter_notebook'] = notebook_name
+        metadata['last_executed'] = now_iso
+
+        if 'creation_data' not in metadata:
+            metadata['creation_data'] = now_iso
+
+        if 'bucket_name' not in metadata:
+            metadata['bucket_name'] = bucket_name
+
+        if 'cells_instrumented' not in metadata:
+            metadata['cells_instrumented'] = []
+
+        # Format code_origin properly for YAML
+        formatted_code_origin = pprint.pformat(code_origin.strip(), width=80, depth=None, compact=False)
+        
+        existing = next((cell for cell in metadata['cells_instrumented'] if cell['hash'] == cell_hash), None)
+        if existing:
+            existing['code_origin'] = formatted_code_origin
+        else:
+            metadata['cells_instrumented'].append({
+                'hash': cell_hash,
+                'code_origin': formatted_code_origin
+            })
+
+        # Use custom YAML dumper to avoid anchors and format code properly
+        class NoAliasDumper(yaml.SafeDumper):
+            def ignore_aliases(self, data):
+                return True
+        
+        # Custom representer for datetime objects
+        def represent_datetime(dumper, data):
+            return dumper.represent_scalar('tag:yaml.org,2002:str', data.isoformat())
+        
+        # Custom representer for code_origin to preserve formatting
+        def represent_str(dumper, data):
+            if '\n' in data:
+                return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+            return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+        
+        NoAliasDumper.add_representer(datetime.datetime, represent_datetime)
+        NoAliasDumper.add_representer(str, represent_str)
+
+        with open(yaml_filename, 'w') as f:
+            yaml.dump(metadata, f, Dumper=NoAliasDumper, sort_keys=False, default_flow_style=False, indent=2)
+
+        print(f"✅ Metadata written to {yaml_filename}")
+    except Exception as e:
+        print(f"❌ Error persisting metadata: {e}")
+
+def download_notebook_cache_package(notebook_name: str, output_zip_path: str = None) -> str:
+    """
+    Download all cached data for a given notebook and package it with metadata into a zip file.
+    
+    Args:
+        notebook_name: Name of the notebook (without .ipynb extension)
+        output_zip_path: Optional path for the output zip file. If None, uses default naming.
+    
+    Returns:
+        str: Path to the created zip file
+    
+    Raises:
+        ValueError: If notebook metadata file is not found
+        Exception: If download or packaging fails
+    """
+    import zipfile
+    import tempfile
+    import shutil
+    
+    try:
+        # Construct the metadata filename
+        yaml_filename = f"{notebook_name}_persistio_archive.yaml"
+        
+        # Check if metadata file exists
+        if not os.path.exists(yaml_filename):
+            raise ValueError(f"Metadata file not found: {yaml_filename}")
+        
+        # Load metadata
+        with open(yaml_filename, 'r') as f:
+            metadata = yaml.safe_load(f)
+        
+        if not metadata or 'cells_instrumented' not in metadata:
+            raise ValueError(f"No cached data found in metadata file: {yaml_filename}")
+        
+        # Create output zip path if not provided
+        if output_zip_path is None:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_zip_path = f"{notebook_name}_cache_package_{timestamp}.zip"
+        
+        print(f"[download_notebook_cache_package] Processing notebook: {notebook_name}")
+        print(f"[download_notebook_cache_package] Found {len(metadata['cells_instrumented'])} cached functions")
+        
+        # Create temporary directory for organizing files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Copy metadata file to temp directory
+            temp_yaml_path = os.path.join(temp_dir, yaml_filename)
+            shutil.copy2(yaml_filename, temp_yaml_path)
+            
+            # Get AWS environment for cloud downloads
+            aws_env = None
+            try:
+                aws_env = get_aws_env()
+                print(f"[download_notebook_cache_package] Using cloud storage: {aws_env['AWS_BUCKET']}")
+            except Exception as e:
+                print(f"[download_notebook_cache_package] Cloud storage not available: {str(e)}")
+            
+            # Download each cached file
+            downloaded_count = 0
+            for cell_info in metadata['cells_instrumented']:
+                cell_hash = cell_info['hash']
+                
+                # Check if file exists locally first
+                local_files = [f for f in os.listdir(REPROLAB_DATA_DIR) if f.startswith(cell_hash + '.')]
+                
+                if local_files:
+                    # File exists locally, copy it
+                    local_file = local_files[0]
+                    local_path = os.path.join(REPROLAB_DATA_DIR, local_file)
+                    temp_path = os.path.join(temp_dir, local_file)
+                    shutil.copy2(local_path, temp_path)
+                    print(f"[download_notebook_cache_package] Copied local file: {local_file}")
+                    downloaded_count += 1
+                
+                elif aws_env:
+                    # Try to download from cloud
+                    try:
+                        s3_client = boto3.client(
+                            's3',
+                            aws_access_key_id=aws_env['AWS_ACCESS_KEY_ID'],
+                            aws_secret_access_key=aws_env['AWS_SECRET_ACCESS_KEY']
+                        )
+                        
+                        # List objects with the hash prefix
+                        response = s3_client.list_objects_v2(
+                            Bucket=aws_env['AWS_BUCKET'],
+                            Prefix=cell_hash
+                        )
+                        
+                        if 'Contents' in response:
+                            cloud_file = response['Contents'][0]['Key']
+                            temp_path = os.path.join(temp_dir, cloud_file)
+                            
+                            # Download from S3
+                            s3_client.download_file(aws_env['AWS_BUCKET'], cloud_file, temp_path)
+                            print(f"[download_notebook_cache_package] Downloaded from cloud: {cloud_file}")
+                            downloaded_count += 1
+                        else:
+                            print(f"[download_notebook_cache_package] Warning: No cloud file found for hash: {cell_hash}")
+                    
+                    except Exception as e:
+                        print(f"[download_notebook_cache_package] Warning: Failed to download {cell_hash} from cloud: {str(e)}")
+                else:
+                    print(f"[download_notebook_cache_package] Warning: No local or cloud file found for hash: {cell_hash}")
+            
+            # Create zip file
+            print(f"[download_notebook_cache_package] Creating zip package: {output_zip_path}")
+            with zipfile.ZipFile(output_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Add all files from temp directory to zip
+                for root, dirs, files in os.walk(temp_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.relpath(file_path, temp_dir)
+                        zipf.write(file_path, arc_name)
+            
+            print(f"[download_notebook_cache_package] ✅ Successfully created package: {output_zip_path}")
+            print(f"[download_notebook_cache_package] 📦 Package contains {downloaded_count} cached files + metadata")
+            
+            return output_zip_path
+    
+    except Exception as e:
+        raise Exception(f"Failed to create notebook cache package: {str(e)}")
+
+import subprocess
+
+def commit_and_checkout_git_tag(tag, repo_path='.'):
+    try:
+        # Ensure the tag exists
+        result = subprocess.run(
+            ['git', '-C', repo_path, 'tag'],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        tags = [t for t in result.stdout.strip().split('\n') if t]
+
+        if tag not in tags:
+            print(f"Tag '{tag}' not found.")
+            return False
+
+        # Stage all changes (new, modified, deleted)
+        subprocess.run(['git', '-C', repo_path, 'add', '-A'], check=True)
+
+        # Check if there is anything to commit
+        status_result = subprocess.run(
+            ['git', '-C', repo_path, 'status', '--porcelain'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        if status_result.stdout.strip():  # There are changes to commit
+            subprocess.run(
+                ['git', '-C', repo_path, 'commit', '-m', f'Committing before checkout to tag {tag}'],
+                check=True
+            )
+            print(f"Committed changes before checking out to tag '{tag}'.")
+        else:
+            print("No changes to commit before checkout.")
+
+        # Checkout to the tag
+        subprocess.run(['git', '-C', repo_path, 'checkout', tag], check=True)
+        print(f"Checked out to tag '{tag}' successfully.")
+        return True
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e.stderr}")
+        return False
+
+def download_reproducability_package(tag_name: str) -> str:
+    """
+    Create a complete reproducibility package for a given git tag.
+    
+    This function:
+    1. Checks out to the specified git tag
+    2. Downloads code package as <tag>_code.zip
+    3. Downloads data package as <tag>_data.zip
+    4. Combines both into <tag>_reproducability_package.zip
+    
+    Args:
+        tag_name: The git tag to create the package for
+    
+    Returns:
+        str: Path to the final reproducibility package zip file
+    
+    Raises:
+        Exception: If any step in the process fails
+    """
+    import zipfile
+    import tempfile
+    import shutil
+    import glob
+    
+    try:
+        print(f"[download_reproducability_package] 🚀 Starting reproducibility package creation for tag: {tag_name}")
+        
+        # Step 1: Checkout to the git tag
+        print(f"[download_reproducability_package] 📋 Step 1: Checking out to git tag '{tag_name}'")
+        if not commit_and_checkout_git_tag(tag_name):
+            raise Exception(f"Failed to checkout to tag '{tag_name}'")
+        
+        # Step 2: Find all notebooks in the current directory
+        print(f"[download_reproducability_package] 📋 Step 2: Finding notebooks")
+        notebook_files = glob.glob('*.ipynb')
+        if not notebook_files:
+            raise Exception("No .ipynb files found in the current directory")
+        
+        print(f"[download_reproducability_package] Found {len(notebook_files)} notebooks: {notebook_files}")
+        
+        # Step 3: Create code package (all notebooks)
+        print(f"[download_reproducability_package] 📋 Step 3: Creating code package")
+        code_zip_path = f"{tag_name}_code.zip"
+        
+        with zipfile.ZipFile(code_zip_path, 'w', zipfile.ZIP_DEFLATED) as code_zip:
+            # Add all notebook files
+            for notebook in notebook_files:
+                code_zip.write(notebook, notebook)
+                print(f"[download_reproducability_package] Added to code package: {notebook}")
+            
+            # Add any Python files in the current directory
+            python_files = glob.glob('*.py')
+            for py_file in python_files:
+                code_zip.write(py_file, py_file)
+                print(f"[download_reproducability_package] Added to code package: {py_file}")
+        
+        print(f"[download_reproducability_package] ✅ Code package created: {code_zip_path}")
+        
+        # Step 4: Create data packages for each notebook
+        print(f"[download_reproducability_package] 📋 Step 4: Creating data packages")
+        data_packages = []
+        
+        for notebook in notebook_files:
+            notebook_name = notebook.replace('.ipynb', '')
+            try:
+                data_zip_path = f"{tag_name}_{notebook_name}_data.zip"
+                download_notebook_cache_package(notebook_name, data_zip_path)
+                data_packages.append(data_zip_path)
+                print(f"[download_reproducability_package] ✅ Data package created: {data_zip_path}")
+            except Exception as e:
+                print(f"[download_reproducability_package] ⚠️ Warning: Failed to create data package for {notebook_name}: {str(e)}")
+        
+        # Step 5: Create final reproducibility package
+        print(f"[download_reproducability_package] 📋 Step 5: Creating final reproducibility package")
+        final_package_path = f"{tag_name}_reproducability_package.zip"
+        
+        with zipfile.ZipFile(final_package_path, 'w', zipfile.ZIP_DEFLATED) as final_zip:
+            # Add code package
+            final_zip.write(code_zip_path, f"code/{code_zip_path}")
+            print(f"[download_reproducability_package] Added to final package: code/{code_zip_path}")
+            
+            # Add data packages
+            for data_package in data_packages:
+                final_zip.write(data_package, f"data/{data_package}")
+                print(f"[download_reproducability_package] Added to final package: data/{data_package}")
+            
+            # Add a README file with package information
+            readme_content = f"""# Reproducibility Package for Tag: {tag_name}
+
+This package contains all the code and data needed to reproduce the results from git tag '{tag_name}'.
+
+## Contents
+
+### Code Package
+- `code/{code_zip_path}`: Contains all Jupyter notebooks and Python files
+
+### Data Packages
+"""
+            for data_package in data_packages:
+                notebook_name = data_package.replace(f"{tag_name}_", "").replace("_data.zip", "")
+                readme_content += f"- `data/{data_package}`: Cached data for {notebook_name}.ipynb\n"
+            
+            readme_content += f"""
+## Usage
+
+1. Extract this package
+2. Extract the code package to get the notebooks
+3. Extract the data packages to get the cached data
+4. Run the notebooks with the reprolab environment
+
+## Package Creation Details
+- Created on: {datetime.datetime.now(datetime.UTC).isoformat()}
+- Git tag: {tag_name}
+- Total notebooks: {len(notebook_files)}
+- Total data packages: {len(data_packages)}
+"""
+            
+            final_zip.writestr("README.md", readme_content)
+            print(f"[download_reproducability_package] Added to final package: README.md")
+        
+        # Clean up intermediate files
+        print(f"[download_reproducability_package] 🧹 Cleaning up intermediate files")
+        try:
+            os.remove(code_zip_path)
+            for data_package in data_packages:
+                os.remove(data_package)
+            print(f"[download_reproducability_package] ✅ Intermediate files cleaned up")
+        except Exception as e:
+            print(f"[download_reproducability_package] ⚠️ Warning: Failed to clean up some intermediate files: {str(e)}")
+        
+        print(f"[download_reproducability_package] 🎉 SUCCESS! Reproducibility package created: {final_package_path}")
+        print(f"[download_reproducability_package] 📦 Package contains:")
+        print(f"   - Code package with {len(notebook_files)} notebooks")
+        print(f"   - {len(data_packages)} data packages")
+        print(f"   - README with usage instructions")
+        
+        return final_package_path
+    
+    except Exception as e:
+        print(f"[download_reproducability_package] ❌ ERROR: Failed to create reproducibility package: {str(e)}")
+        raise Exception(f"Failed to create reproducibility package for tag '{tag_name}': {str(e)}")
+
+import subprocess
+import re
+
+def list_and_sort_git_tags(repo_path='.'):
+    try:
+        result = subprocess.run(
+            ['git', '-C', repo_path, 'tag'],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        tags = result.stdout.strip().split('\n')
+        tags = [tag for tag in tags if tag]
+
+        # Convert tags like v1.2.3 to 123 for sorting
+        def tag_to_sort_key(tag):
+            match = re.match(r'v(\d+)\.(\d+)\.(\d+)', tag)
+            if match:
+                return int(''.join(match.groups()))
+            return -1  # Push malformed tags to the end
+
+        sorted_tags = sorted(tags, key=tag_to_sort_key, reverse=True)
+        return sorted_tags
+    except subprocess.CalledProcessError as e:
+        print(f"Error listing tags: {e.stderr}")
+        return []
 

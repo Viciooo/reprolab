@@ -95,7 +95,7 @@ class ReprolabSidebarWidget extends Widget {
     this.checklistSection = new ChecklistSection();
     this.demoSection = new DemoSection(this.app, this.notebooks);
     this.archiveSection = new ArchiveSection();
-    this.zenodoSection = new ZenodoSection();
+    this.zenodoSection = new ZenodoSection(this.app, this.notebooks);
     this.experimentSection = new ExperimentSection(this.app, this.notebooks);
     this.environmentSection = new EnvironmentSection(this.app, this.notebooks);
   }
@@ -245,7 +245,7 @@ class ReprolabSidebarWidget extends Widget {
     const modalTestBtn = modal.querySelector(`#${BUTTON_IDS.MODAL_TEST}`);
     if (modalTestBtn) {
       modalTestBtn.addEventListener('click', () => {
-        console.log('test from the modal');
+        this.zenodoSection.handleTestButton();
       });
     }
 
