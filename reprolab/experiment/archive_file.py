@@ -759,8 +759,8 @@ def download_reproducability_package(tag_name: str) -> str:
         with zipfile.ZipFile(code_zip_path, 'w', zipfile.ZIP_DEFLATED) as code_zip:
             # Add all files in the current directory and subdirectories
             for root, dirs, files in os.walk('.'):
-                # Skip directories that start with a dot
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
+                # Skip directories that start with a dot and node_modules
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d != 'node_modules']
                 
                 for file in files:
                     # Skip certain file types
@@ -811,7 +811,7 @@ This package contains all the code and data needed to reproduce the results from
 ## Contents
 
 ### Code Package
-- `code/{code_zip_path}`: Contains all project files (excluding files in folders starting with '.')
+- `code/{code_zip_path}`: Contains all project files (excluding files in folders starting with '.' and node_modules)
 
 ### Data Packages
 """
