@@ -752,15 +752,15 @@ def download_reproducability_package(tag_name: str) -> str:
         
         print(f"[download_reproducability_package] Found {len(notebook_files)} notebooks: {notebook_files}")
         
-        # Step 3: Create code package (all files in the repository)
+        # Step 3: Create code package (all files except those in folders starting with .)
         print(f"[download_reproducability_package] 📋 Step 3: Creating code package")
         code_zip_path = f"{tag_name}_code.zip"
         
         with zipfile.ZipFile(code_zip_path, 'w', zipfile.ZIP_DEFLATED) as code_zip:
             # Add all files in the current directory and subdirectories
             for root, dirs, files in os.walk('.'):
-                # Skip certain directories
-                dirs[:] = [d for d in dirs if d not in ['.git', '__pycache__', '.ipynb_checkpoints', 'node_modules', '.reprolab_data']]
+                # Skip directories that start with a dot
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
                 
                 for file in files:
                     # Skip certain file types
@@ -811,7 +811,7 @@ This package contains all the code and data needed to reproduce the results from
 ## Contents
 
 ### Code Package
-- `code/{code_zip_path}`: Contains all Jupyter notebooks and Python files
+- `code/{code_zip_path}`: Contains all project files (excluding files in folders starting with '.')
 
 ### Data Packages
 """

@@ -1,4 +1,4 @@
-#!/Users/spoton/Documents/master_thesis/poc/reprolab/my_venv/bin/python
+#!/Users/spoton/Documents/master_thesis/poc/reprolab/.my_venv/bin/python
 
 import sys
 import json
