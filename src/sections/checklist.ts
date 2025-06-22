@@ -2,13 +2,12 @@ import { createSection, getXsrfToken } from '../utils';
 
 const CHECKLIST_FILE = 'reprolab_data/reproducibility_checklist.json';
 const DEFAULT_CHECKLIST = [
-  'All code and data are version controlled',
-  'Environment is specified (e.g., requirements.txt, environment.yml)',
-  'Random seeds are set for reproducibility',
-  'Results can be regenerated with a single command',
-  'Documentation is provided for all steps',
-  'Notebooks/scripts are cleaned and annotated',
-  'External data sources are referenced and accessible'
+  "Notebook contains clear narrative text explaining analysis steps.",
+  "All software dependencies are specified with pinned versions.",
+  "Project is under version control (e.g., Git) in a public repository.",
+  "Notebook can be run end-to-end without manual steps.",
+  "All input data are available or easily accessible.",
+  "Project includes clear usage and interpretation instructions."
 ];
 
 export class ChecklistSection {
@@ -23,18 +22,25 @@ export class ChecklistSection {
 
   render(): string {
     const checklistContent = `
-      <ul>
-        ${this.checklist.map(item => `
+      <ul style="list-style: none; padding-left: 0;">
+        ${this.checklist
+          .map(
+            item => `
           <li>
             <label>
               <input type="checkbox" data-item="${encodeURIComponent(item)}" ${this.checked[item] ? 'checked' : ''} />
               ${item}
             </label>
           </li>
-        `).join('')}
+        `
+          )
+          .join('')}
       </ul>
     `;
-    const section = createSection('Reproducibility Checklist', checklistContent);
+    const section = createSection(
+      'Reproducibility Checklist',
+      checklistContent
+    );
     return section.outerHTML;
   }
 
