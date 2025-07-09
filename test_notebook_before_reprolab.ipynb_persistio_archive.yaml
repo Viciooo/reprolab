@@ -1,5 +1,5 @@
 jupyter_notebook: test_notebook_before_reprolab.ipynb
-last_executed: '2025-07-09T21:07:29.312055+00:00'
+last_executed: '2025-07-09T21:08:36.741343+00:00'
 creation_data: '2025-07-09T21:07:24.009664+00:00'
 bucket_name: viciooo-dvc-testing
 cells_instrumented:
@@ -30,3 +30,41 @@ cells_instrumented:
      'def get_openlibrary_api_key():\n'
      '    with open("OPENLIBRARY_API_KEY.txt", "r") as file:\n'
      '        return file.read().strip()')
+- hash: 2d3014cd4bbb3f3c4142fc1c7aefebde
+  code_origin: |-
+    ('@persistio()\n'
+     'def get_book_details(title):\n'
+     '    OPENLIBRARY_API_KEY = get_openlibrary_api_key()\n'
+     '    \n'
+     '    url = '
+     'f"https://openlibrary.org/search.json?title={title}&apikey={OPENLIBRARY_API_KEY}"\n'
+     '    response = requests.get(url)\n'
+     '    if response.status_code == 200:\n'
+     '        data = response.json()\n'
+     "        if data['docs']:\n"
+     "            book = data['docs'][0]\n"
+     '            return {\n'
+     "                'isbn': book.get('isbn', ['N/A'])[0],\n"
+     "                'page_count': book.get('number_of_pages_median', 0),\n"
+     "                'first_publish': book.get('first_publish_year', None)\n"
+     '            }\n'
+     "    return {'isbn': 'N/A', 'page_count': 0, 'first_publish': None}")
+- hash: 014c29751c03f659e6a23df1c73ab5a5
+  code_origin: |-
+    ('@persistio()\n'
+     'def get_book_details(title):\n'
+     '    OPENLIBRARY_API_KEY = get_openlibrary_api_key()\n'
+     '    \n'
+     '    url = '
+     'f"https://openlibrary.org/search.json?title={title}&apikey={OPENLIBRARY_API_KEY}"\n'
+     '    response = requests.get(url)\n'
+     '    if response.status_code == 200:\n'
+     '        data = response.json()\n'
+     "        if data['docs']:\n"
+     "            book = data['docs'][0]\n"
+     '            return {\n'
+     "                'isbn': book.get('isbn', ['N/A'])[0],\n"
+     "                'page_count': book.get('number_of_pages_median', 0),\n"
+     "                'first_publish': book.get('first_publish_year', None)\n"
+     '            }\n'
+     "    return {'isbn': 'N/A', 'page_count': 0, 'first_publish': None}")
