@@ -1,0 +1,32 @@
+jupyter_notebook: test_notebook_before_reprolab.ipynb
+last_executed: '2025-07-09T21:07:29.312055+00:00'
+creation_data: '2025-07-09T21:07:24.009664+00:00'
+bucket_name: viciooo-dvc-testing
+cells_instrumented:
+- hash: fd6c2a5e2f8bf4da3913aa47a8a83f5c
+  code_origin: '"@persistio()\ndef load_csv_data():\n    return pd.read_csv(''books.csv'')"'
+- hash: 1f54eda134aa73d1934bf6b158e6fc44
+  code_origin: |-
+    ('@persistio()\n'
+     'def get_book_details(title):\n'
+     '    OPENLIBRARY_API_KEY = get_openlibrary_api_key()\n'
+     '    \n'
+     '    url = '
+     'f"https://openlibrary.org/search.json?title={title}&apikey={OPENLIBRARY_API_KEY}"\n'
+     '    response = requests.get(url)\n'
+     '    if response.status_code == 200:\n'
+     '        data = response.json()\n'
+     "        if data['docs']:\n"
+     "            book = data['docs'][0]\n"
+     '            return {\n'
+     "                'isbn': book.get('isbn', ['N/A'])[0],\n"
+     "                'page_count': book.get('number_of_pages_median', 0),\n"
+     "                'first_publish': book.get('first_publish_year', None)\n"
+     '            }\n'
+     "    return {'isbn': 'N/A', 'page_count': 0, 'first_publish': None}")
+- hash: 2be4bf46f700cb8a2d6048886e0e6449
+  code_origin: |-
+    ('@persistio()\n'
+     'def get_openlibrary_api_key():\n'
+     '    with open("OPENLIBRARY_API_KEY.txt", "r") as file:\n'
+     '        return file.read().strip()')
