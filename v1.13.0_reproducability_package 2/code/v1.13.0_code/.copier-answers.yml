@@ -1,0 +1,14 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v4.3.8
+_src_path: https://github.com/jupyterlab/extension-template
+author_email: witekpiotrdev@gmail.com
+author_name: Piotr Witek
+has_binder: false
+has_settings: false
+kind: frontend
+labextension_name: reprolab
+project_short_description: One step closer reproducible research
+python_name: reprolab
+repository: ''
+test: false
+
