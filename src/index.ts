@@ -95,7 +95,7 @@ class ReprolabSidebarWidget extends Widget {
     this.checklistSection = new ChecklistSection();
     this.demoSection = new DemoSection(this.app, this.notebooks);
     this.archiveSection = new ArchiveSection();
-    this.zenodoSection = new ZenodoSection();
+    this.zenodoSection = new ZenodoSection(this.app, this.notebooks);
     this.experimentSection = new ExperimentSection(this.app, this.notebooks);
     this.environmentSection = new EnvironmentSection(this.app, this.notebooks);
   }
@@ -127,8 +127,8 @@ class ReprolabSidebarWidget extends Widget {
     const sections = [
       this.demoSection.render(),
       this.checklistSection.render(),
-      this.experimentSection.render(),
       this.environmentSection.render(),
+      this.experimentSection.render(),
       this.archiveSection.render(),
       this.zenodoSection.render()
     ];
@@ -162,14 +162,34 @@ class ReprolabSidebarWidget extends Widget {
     closeButton.className = 'reprolab-modal-close';
     closeButton.textContent = '×';
     
-    const modalText = document.createElement('p');
-    modalText.textContent = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.';
+    const modalText = document.createElement('div');
+    modalText.innerHTML = `
+      <section style="font-size: 16px; line-height: 1.6;">
+        <p>
+          Clicking the <strong>Create Reproducibility Package</strong> button below will insert and execute a Python code cell that generates a complete reproducibility package—bundling both your data and code.
+        </p>
+        <p>
+          You can share this package with colleagues or publish it on platforms like 
+          <a href="https://zenodo.org/" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">Zenodo</a>, which will assign a persistent identifier (DOI) to your work.
+        </p>
+        <p>
+          For detailed instructions on structuring and publishing reproducible research, please consult the official Zenodo guide:  
+          <a href="https://doi.org/10.5281/zenodo.11146986" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">
+            Make Your Research Reproducible: Practical Guide for Researchers (DOI: 10.5281/zenodo.11146986)
+          </a>
+        </p>
+        <p>
+          Additional help can be found in the Zenodo documentation under their "Guide" and "GitHub and Software" sections:  
+          <a href="https://help.zenodo.org/docs/" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">Zenodo Guides & Docs</a>
+        </p>
+      </section>
+    `;
     
-    const testButton = createButton(BUTTON_IDS.MODAL_TEST, 'Test');
+    const createPackageButton = createButton(BUTTON_IDS.MODAL_TEST, 'Create Reproducibility Package');
     
     modalContent.appendChild(closeButton);
     modalContent.appendChild(modalText);
-    modalContent.appendChild(testButton);
+    modalContent.appendChild(createPackageButton);
     
     modal.appendChild(modalContent);
     return modal;
@@ -245,7 +265,9 @@ class ReprolabSidebarWidget extends Widget {
     const modalTestBtn = modal.querySelector(`#${BUTTON_IDS.MODAL_TEST}`);
     if (modalTestBtn) {
       modalTestBtn.addEventListener('click', () => {
-        console.log('test from the modal');
+        console.log('Create Reproducibility Package button clicked');
+        this.zenodoSection.handleTestButton();
+        modal.style.display = 'none';
       });
     }
 

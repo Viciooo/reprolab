@@ -10,9 +10,9 @@ const ENVIRONMENT_OPTIONS = {
 
 const CELL_CONTENT = {
   ENVIRONMENT_SETUP: `from reprolab.environment import create_new_venv
-create_new_venv('my_venv')`,
+create_new_venv('.my_venv')`,
   FREEZE_DEPS: `from reprolab.environment import freeze_venv_dependencies
-freeze_venv_dependencies('my_venv')`
+freeze_venv_dependencies('.my_venv')`
 } as const;
 
 export class EnvironmentSection {
